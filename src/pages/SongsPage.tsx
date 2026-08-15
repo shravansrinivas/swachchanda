@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { QueueItem } from '../data/artists'
+import { letterFor } from '../lib/alphabet'
 import { useLanguage } from '../lib/language'
 import { instagramUrl, mailtoUrl } from '../data/copy'
 import { usePlayer } from '../lib/player'
+import { AlphabetRail } from '../components/AlphabetRail'
 import { FilterSheet, FilterSummary } from '../components/MoodFilter'
 import { MoodRow } from '../components/MoodRow'
 import { SectionHeading } from '../components/SectionHeading'
@@ -42,6 +44,31 @@ export function SongsPage() {
     // order, so searching only removes rows, never rearranges them.
     return playOrder.filter(matches)
   }, [playOrder, search])
+
+  /**
+   * The A to Z rail, offered only when the list is actually in alphabetical
+   * order.
+   *
+   * Under shuffle, or sorted in tape order, the letters would not run down the
+   * page, and a jump to M would land somewhere arbitrary. A shortcut that lies
+   * about where it is taking you is worse than no shortcut, so it simply is not
+   * there. Which field it indexes follows the sort: by title it is the song, by
+   * artist it is the billed name, both romanised, which is what the sort itself
+   * compares.
+   */
+  const alphabetical = !shuffleOn && (sort === 'title' || sort === 'artist')
+  const letterOf = (item: QueueItem) =>
+    letterFor(sort === 'artist' ? item.billing.en : item.song.title)
+  const letters = useMemo(
+    () => (alphabetical ? new Set(shown.map(letterOf)) : new Set<string>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shown, alphabetical, sort],
+  )
+
+  const jumpTo = (letter: string, smooth: boolean) => {
+    const row = document.querySelector<HTMLElement>(`[data-letter="${letter}"]`)
+    row?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
+  }
 
   return (
     <section className="px-5 py-8">
@@ -141,14 +168,32 @@ export function SongsPage() {
           </div>
         </div>
       ) : (
-        <ul className="grain relative overflow-hidden rounded-[3px] border border-dust/15 bg-deck/70 px-4">
-          {shown.map((item, i) => (
-            <li key={item.key} className="border-b border-dust/12 last:border-b-0">
-              <TrackRow item={item} index={i} showArtist showTags />
-            </li>
-          ))}
+        <ul
+          className={`grain relative overflow-hidden rounded-[3px] border border-dust/15 bg-deck/70 px-4 ${
+            letters.size > 1 ? 'pr-7' : ''
+          }`}
+        >
+          {shown.map((item, i) => {
+            const letter = letterOf(item)
+            // Only the *first* row of each letter is a jump target, so the rail
+            // lands on the top of a run rather than somewhere inside it.
+            const first = alphabetical && (i === 0 || letterOf(shown[i - 1]) !== letter)
+            return (
+              <li
+                key={item.key}
+                data-letter={first ? letter : undefined}
+                className="scroll-mt-24 border-b border-dust/12 last:border-b-0"
+              >
+                <TrackRow item={item} index={i} showArtist showTags />
+              </li>
+            )
+          })}
         </ul>
       )}
+      {/* Below two letters there is nothing to navigate and the rail is just
+          furniture down the edge of the screen. */}
+      {letters.size > 1 && <AlphabetRail available={letters} onPick={jumpTo} />}
+
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-dust/15 pt-5">
         <span className={`text-sm text-dust ${kn ? 'kn' : ''}`}>{t.suggestHeading}</span>
         <a

@@ -192,6 +192,7 @@ export function EkanthaPage() {
         <CassetteBody
           progress={progress}
           playing={playing}
+          threading={status === 'loading'}
           side={t.ekanthaTagline}
           title={title}
           artist={artistName}

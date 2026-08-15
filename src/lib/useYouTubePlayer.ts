@@ -58,6 +58,37 @@ const PLAY_TIMEOUT_MS = 6000
 /** Errors 101 and 150 both mean "the uploader disabled embedding". */
 const EMBED_BLOCKED = [101, 150]
 
+/**
+ * Call a player method only if it is actually there, and never let it take the
+ * page down.
+ *
+ * `new YT.Player()` hands back an object whose methods are installed by the
+ * iframe once its handshake completes. If that iframe never loads, and in an
+ * app's built-in browser it may well not, the object stays a shell: calling
+ * `getDuration()` on it throws `not a function`. That throw came from the
+ * polling interval, which is outside React's render path, so it took the whole
+ * app down with it and left a blank page rather than a deck saying it could not
+ * play. A silent failure to start is bad; a white screen is much worse.
+ */
+function ask<T>(player: YTPlayer | null, method: keyof YTPlayer, fallback: T): T {
+  if (!player || typeof player[method] !== 'function') return fallback
+  try {
+    return (player[method] as () => T)()
+  } catch {
+    return fallback
+  }
+}
+
+/** The same guard for the calls that do something rather than report something. */
+function tell(player: YTPlayer | null, method: keyof YTPlayer, ...args: unknown[]): void {
+  if (!player || typeof player[method] !== 'function') return
+  try {
+    ;(player[method] as (...a: unknown[]) => void)(...args)
+  } catch {
+    /* A player that cannot be driven is handled by the timeout, not by throwing. */
+  }
+}
+
 let apiPromise: Promise<YTNamespace> | null = null
 
 /** Load the IFrame API once per page, no matter how many callers ask. */
@@ -133,6 +164,12 @@ export interface YouTubePlayerApi {
   quality: string | null
   /** True when the video exists but refuses to embed, offer the outbound link. */
   embedBlocked: boolean
+  /**
+   * A play was asked for and nothing ever started: no PLAYING, no error, no
+   * buffering. That is what a browser silently refusing to start audio looks
+   * like from in here, and it is the only evidence of it there is.
+   */
+  startBlocked: boolean
   /** Increments each time a song runs to its end, so a caller can auto-advance. */
   endedCount: number
   play: (item: QueueItem) => void
@@ -168,6 +205,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   const [buffered, setBuffered] = useState(0)
   const [quality, setQuality] = useState<string | null>(null)
   const [embedBlocked, setEmbedBlocked] = useState(false)
+  const [startBlocked, setStartBlocked] = useState(false)
   const [endedCount, setEndedCount] = useState(0)
 
   const playerRef = useRef<YTPlayer | null>(null)
@@ -180,9 +218,28 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   /** Set the moment anything is cued or played, ahead of the state update. */
   const cuedRef = useRef(false)
 
+  /**
+   * Fetch the IFrame API as soon as the app is alive, rather than on the first
+   * tap of play.
+   *
+   * The old order was: tap, then fetch a script from YouTube, then build a
+   * player, then start. That put a network round trip inside the gap between
+   * pressing play and hearing anything, which is the gap this deck is least
+   * able to explain. Asking for it at boot means the tap usually meets an API
+   * that is already there.
+   *
+   * This loads a script; it does not create a player and does not load a video,
+   * so nothing is fetched from YouTube on anyone's behalf until they press
+   * play. The promise is shared and deduplicated, so the play path picks up
+   * this same one rather than starting a second.
+   */
+  useEffect(() => {
+    void loadYouTubeApi().catch(() => {})
+  }, [])
+
   useEffect(() => {
     return () => {
-      playerRef.current?.destroy()
+      tell(playerRef.current, 'destroy')
       playerRef.current = null
       hostRef.current?.remove()
       hostRef.current = null
@@ -191,11 +248,18 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   }, [])
 
   // If a requested play never reaches a real state, treat it as blocked rather
-  // than leaving the deck reading "cueing up" indefinitely.
+  // than leaving the deck reading "threading the tape" indefinitely.
   useEffect(() => {
     if (status !== 'loading') return
     const id = window.setTimeout(() => {
-      setStatus((current) => (current === 'loading' ? 'paused' : current))
+      setStatus((current) => {
+        if (current !== 'loading') return current
+        // Nothing started and nothing failed. Worth recording, because it is
+        // the signature of a browser that will not let audio begin, and the
+        // deck can then offer a way out instead of just looking idle.
+        setStartBlocked(true)
+        return 'paused'
+      })
     }, PLAY_TIMEOUT_MS)
     return () => window.clearTimeout(id)
   }, [status])
@@ -206,13 +270,13 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     const tick = () => {
       const player = playerRef.current
       if (!player) return
-      const total = player.getDuration()
-      const at = player.getCurrentTime()
+      const total = ask(player, 'getDuration', 0)
+      const at = ask(player, 'getCurrentTime', 0)
       setDuration(total)
       setCurrentTime(at)
       setProgress(total > 0 ? at / total : 0)
-      setBuffered(player.getVideoLoadedFraction?.() ?? 0)
-      setQuality(player.getPlaybackQuality?.() ?? null)
+      setBuffered(ask(player, 'getVideoLoadedFraction', 0))
+      setQuality(ask<string | null>(player, 'getPlaybackQuality', null))
     }
 
     tick()
@@ -238,10 +302,10 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     if (requestRef.current === key && playerRef.current && readyRef.current) {
       setStatus((current) => {
         if (current === 'playing') {
-          playerRef.current?.pauseVideo()
+          tell(playerRef.current, 'pauseVideo')
           return 'paused'
         }
-        playerRef.current?.playVideo()
+        tell(playerRef.current, 'playVideo')
         return current === 'error' ? current : 'playing'
       })
       return
@@ -255,6 +319,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     setDuration(0)
     setBuffered(0)
     setEmbedBlocked(false)
+    setStartBlocked(false)
 
     void loadYouTubeApi()
       .then((YT) => {
@@ -262,7 +327,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
         if (requestRef.current !== key) return
 
         if (playerRef.current) {
-          if (readyRef.current) playerRef.current.loadVideoById(song.youtubeId)
+          if (readyRef.current) tell(playerRef.current, 'loadVideoById', song.youtubeId)
           else pendingRef.current = song.youtubeId
           return
         }
@@ -285,11 +350,14 @@ export function useYouTubePlayer(): YouTubePlayerApi {
               readyRef.current = true
               const queued = pendingRef.current
               pendingRef.current = null
-              if (queued) playerRef.current?.loadVideoById(queued)
-              else playerRef.current?.playVideo()
+              if (queued) tell(playerRef.current, 'loadVideoById', queued)
+              else tell(playerRef.current, 'playVideo')
             },
             onStateChange: (event: { data: number }) => {
-              if (event.data === PLAYING) setStatus('playing')
+              if (event.data === PLAYING) {
+                setStatus('playing')
+                setStartBlocked(false)
+              }
               else if (event.data === PAUSED) setStatus('paused')
               else if (event.data === BUFFERING) setStatus('loading')
               else if (event.data === CUED) setStatus('paused')
@@ -319,7 +387,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     // attempt was still in flight let the previous track start a second later,
     // playing under the newly cued song's name. Loading is left alone: the next
     // press of play loads the cued track, which is what `toggle` is for.
-    if (playerRef.current && readyRef.current) playerRef.current.pauseVideo()
+    if (readyRef.current) tell(playerRef.current, 'pauseVideo')
     setNowPlaying(item)
   }, [])
 
@@ -340,13 +408,13 @@ export function useYouTubePlayer(): YouTubePlayerApi {
 
     setStatus((current) => {
       if (current === 'playing') {
-        player.pauseVideo()
+        tell(player, 'pauseVideo')
         return 'paused'
       }
       // Anything that is not playing should start playing. This used to act
       // only on 'paused' and fall through on 'loading', so after a blocked
       // autoplay the deck sat in 'loading' and pressing play did nothing at all.
-      player.playVideo()
+      tell(player, 'playVideo')
       return current === 'error' ? current : 'playing'
     })
   }, [nowPlaying, play])
@@ -354,9 +422,9 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   const seekTo = useCallback((seconds: number) => {
     const player = playerRef.current
     if (!player || !readyRef.current) return
-    const total = player.getDuration()
+    const total = ask(player, 'getDuration', 0)
     const target = Math.min(Math.max(0, seconds), total > 0 ? total : seconds)
-    player.seekTo(target, true)
+    tell(player, 'seekTo', target, true)
     // Update immediately so the scrubber doesn't snap back before the next poll.
     setCurrentTime(target)
     setProgress(total > 0 ? target / total : 0)
@@ -366,7 +434,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     (delta: number) => {
       const player = playerRef.current
       if (!player || !readyRef.current) return
-      seekTo(player.getCurrentTime() + delta)
+      seekTo(ask(player, 'getCurrentTime', 0) + delta)
     },
     [seekTo],
   )
@@ -374,7 +442,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   const hasCue = useCallback(() => cuedRef.current, [])
 
   const stop = useCallback(() => {
-    playerRef.current?.stopVideo()
+    tell(playerRef.current, 'stopVideo')
     requestRef.current = null
     pendingRef.current = null
     cuedRef.current = false
@@ -386,6 +454,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     setBuffered(0)
     setQuality(null)
     setEmbedBlocked(false)
+    setStartBlocked(false)
   }, [])
 
   const isCurrent = useCallback(
@@ -402,6 +471,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     buffered,
     quality,
     embedBlocked,
+    startBlocked,
     endedCount,
     play,
     cue,

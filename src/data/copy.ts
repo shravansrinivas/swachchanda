@@ -106,6 +106,9 @@ export interface Copy {
   ctaAnyMood: string
   searchPlaceholder: string
   searchClear: string
+  /** The A to Z rail down the right edge of a long list. */
+  alphabetLabel: string
+  jumpToLetter: (letter: string) => string
   sortLabel: string
   sortRoster: string
   sortTitle: string
@@ -168,8 +171,13 @@ export interface Copy {
   playerBlocked: string
   /** Anything else: network, API failure, removed video. */
   playerError: string
+  /** An app's built-in browser refusing to start audio. */
+  inAppTitle: string
+  inAppBody: (app: string) => string
   openOnYoutube: string
   loading: string
+  /** The same state on the minimised bar, where the label truncates at ~12 characters. */
+  loadingShort: string
   sideA: string
   sideB: string
 
@@ -252,6 +260,8 @@ const en: Copy = {
   ctaAnyMood: 'Anything',
   searchPlaceholder: 'Search a song or an artist',
   searchClear: 'Clear search',
+  alphabetLabel: 'Jump to a letter',
+  jumpToLetter: (letter) => `Jump to ${letter}`,
   sortLabel: 'Order',
   sortRoster: 'Tape order',
   sortTitle: 'Title',
@@ -310,8 +320,12 @@ const en: Copy = {
   close: 'Stop and close player',
   playerBlocked: "Can't be played here",
   playerError: "Couldn't load that one",
+  inAppTitle: 'This browser will not start the tape',
+  inAppBody: (app) =>
+    `${app} opens links in its own cut-down browser, and that browser often refuses to play embedded audio. Open this page in Chrome, Safari or Firefox and it will play. The song itself is fine.`,
   openOnYoutube: 'Open on YouTube',
-  loading: 'Cueing up',
+  loading: 'Threading the tape',
+  loadingShort: 'Spooling up',
   sideA: 'Side A',
   sideB: 'Side B',
 
@@ -394,6 +408,8 @@ const kn: Copy = {
   ctaAnyMood: 'ಯಾವುದಾದರೂ',
   searchPlaceholder: 'ಹಾಡು ಅಥವಾ ಕಲಾವಿದರ ಹೆಸರು ಹುಡುಕಿ',
   searchClear: 'ಹುಡುಕಾಟ ಅಳಿಸಿ',
+  alphabetLabel: 'ಅಕ್ಷರಕ್ಕೆ ಹೋಗಿ',
+  jumpToLetter: (letter) => `${letter} ಗೆ ಹೋಗಿ`,
   sortLabel: 'ಕ್ರಮ',
   sortRoster: 'ಟೇಪಿನ ಕ್ರಮ',
   sortTitle: 'ಹಾಡಿನ ಹೆಸರು',
@@ -452,8 +468,12 @@ const kn: Copy = {
   close: 'ನಿಲ್ಲಿಸಿ ಮುಚ್ಚಿ',
   playerBlocked: 'ಇದನ್ನ ಇಲ್ಲಿ ಹಾಕೋಕೆ ಆಗಲ್ಲ',
   playerError: 'ಇದು ಬರಲಿಲ್ಲ',
+  inAppTitle: 'ಈ ಬ್ರೌಸರಿನಲ್ಲಿ ಟೇಪು ಶುರುವಾಗಲ್ಲ',
+  inAppBody: (app) =>
+    `${app} ಕೊಂಡಿಗಳನ್ನ ತನ್ನದೇ ಸಣ್ಣ ಬ್ರೌಸರಿನಲ್ಲಿ ತೆರೀತದೆ, ಅದು ಒಳಗಿನ ಆಡಿಯೋ ಹಾಕೋಕೆ ಬಿಡಲ್ಲ. ಈ ಪುಟವನ್ನ ಕ್ರೋಮ್, ಸಫಾರಿ ಅಥವಾ ಫೈರ್‌ಫಾಕ್ಸಿನಲ್ಲಿ ತೆರೆದರೆ ಹಾಡು ಹಾಕುತ್ತೆ. ಹಾಡಿಗೆ ಏನೂ ತೊಂದರೆ ಇಲ್ಲ.`,
   openOnYoutube: 'ಯೂಟ್ಯೂಬಿನಲ್ಲಿ ತೆರೆಯಿರಿ',
-  loading: 'ಬರ್ತಿದೆ',
+  loading: 'ಟೇಪು ಸಿಕ್ಕಿಸ್ತಿದೆ',
+  loadingShort: 'ಸಿಕ್ಕಿಸ್ತಿದೆ',
   sideA: 'ಎ ಸೈಡು',
   sideB: 'ಬಿ ಸೈಡು',
 
