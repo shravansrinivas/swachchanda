@@ -22,10 +22,13 @@ export function CassetteReel({
   /** 0 to 1: how much tape is wound onto this reel. */
   wound,
   playing,
+  /** Waiting for the song to load. Turns slowly rather than sitting dead. */
+  threading = false,
   size = 44,
 }: {
   wound: number
   playing: boolean
+  threading?: boolean
   size?: number
 }) {
   const radius = MIN_WOUND + Math.min(1, Math.max(0, wound)) * (MAX_WOUND - MIN_WOUND)
@@ -51,7 +54,11 @@ export function CassetteReel({
       />
 
       {/* Hub and spokes. These are what turns. */}
-      <g className={`spin-center ${playing ? 'reel-spinning' : 'reel-stopped'}`}>
+      <g
+        className={`spin-center ${
+          playing ? 'reel-spinning' : threading ? 'reel-threading' : 'reel-stopped'
+        }`}
+      >
         <circle cx="24" cy="24" r={HUB} className="fill-tape" />
         {spokes.map((angle) => (
           <line
@@ -75,6 +82,7 @@ export function CassetteReel({
 export function CassetteBody({
   progress,
   playing,
+  threading = false,
   side,
   title,
   artist,
@@ -82,6 +90,8 @@ export function CassetteBody({
 }: {
   progress: number
   playing: boolean
+  /** Loading. The reels turn slowly and the counter runs a lit patch. */
+  threading?: boolean
   side: string
   /** Song title in both scripts. */
   title: Bilingual
@@ -171,16 +181,23 @@ export function CassetteBody({
 
         {/* Reel window. */}
         <div className="mx-2 mt-2.5 flex items-center justify-between rounded-[3px] border border-dust/20 bg-tape/85 px-6 py-3">
-          <CassetteReel wound={1 - progress} playing={playing} size={52} />
+          <CassetteReel wound={1 - progress} playing={playing} threading={threading} size={52} />
 
-          <div aria-hidden="true" className="mx-3 h-[3px] flex-1 rounded-full bg-dust/20">
-            <div
-              className="h-full rounded-full bg-dial transition-[width] duration-500 ease-linear"
-              style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
-            />
+          <div
+            aria-hidden="true"
+            className="mx-3 h-[3px] flex-1 overflow-hidden rounded-full bg-dust/20"
+          >
+            {threading ? (
+              <div className="tape-threading h-full w-1/3 rounded-full bg-dial/80" />
+            ) : (
+              <div
+                className="h-full rounded-full bg-dial transition-[width] duration-500 ease-linear"
+                style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+              />
+            )}
           </div>
 
-          <CassetteReel wound={progress} playing={playing} size={52} />
+          <CassetteReel wound={progress} playing={playing} threading={threading} size={52} />
         </div>
       </div>
     </div>

@@ -149,13 +149,38 @@
   animation-play-state: paused;
 }
 
+/* Spooling up. Slower than playback on purpose: a deck threading a tape turns,
+ * but not at speed, and the difference is what says "working on it" rather than
+ * "playing". */
+.reel-threading {
+  animation: reel-spin 9s linear infinite;
+}
+
+/* The counter bar while there is nothing to count yet: a lit patch running the
+ * length of the tape path. Deliberately not a fake progress bar, since we have
+ * no idea how far along the load is and pretending to would be a lie. */
+@keyframes tape-thread {
+  0% {
+    transform: translateX(-140%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.tape-threading {
+  animation: tape-thread 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
   .reel-spinning,
-  .reel-stopped {
+  .reel-stopped,
+  .reel-threading,
+  .tape-threading {
     animation: none;
   }
 

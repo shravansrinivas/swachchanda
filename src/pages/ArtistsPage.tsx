@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { artists, leadingArtists, queue, supportingArtists } from '../data/artists'
+import { letterFor } from '../lib/alphabet'
 import { useLanguage } from '../lib/language'
+import { AlphabetRail } from '../components/AlphabetRail'
 import { ArtistCard } from '../components/ArtistCard'
 import { SectionHeading } from '../components/SectionHeading'
 
@@ -16,6 +18,15 @@ import { SectionHeading } from '../components/SectionHeading'
 export function ArtistsPage() {
   const { t, lang, kn } = useLanguage()
 
+  // `leadingArtists` is already A to Z on the romanised name, which is what the
+  // rail indexes. The also-credited names below are a short inline list, not
+  // somewhere to scroll to, so they are not targets.
+  const letters = new Set(leadingArtists.map((artist) => letterFor(artist.name.en)))
+  const jumpTo = (letter: string, smooth: boolean) => {
+    const card = document.querySelector<HTMLElement>(`[data-letter="${letter}"]`)
+    card?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
+  }
+
   return (
     <section className="px-5 py-8">
       <SectionHeading side={t.sideA} title={t.navArtists} lang={lang} />
@@ -25,10 +36,18 @@ export function ArtistsPage() {
       </p>
 
       <div className="space-y-5">
-        {leadingArtists.map((artist, index) => (
-          <ArtistCard key={artist.id} artist={artist} index={index} />
-        ))}
+        {leadingArtists.map((artist, index) => {
+          const letter = letterFor(artist.name.en)
+          const first = index === 0 || letterFor(leadingArtists[index - 1].name.en) !== letter
+          return (
+            <div key={artist.id} data-letter={first ? letter : undefined} className="scroll-mt-24">
+              <ArtistCard artist={artist} index={index} />
+            </div>
+          )
+        })}
       </div>
+
+      {letters.size > 1 && <AlphabetRail available={letters} onPick={jumpTo} />}
 
       {supportingArtists.length > 0 && (
         <section className="mt-10 border-t border-dust/15 pt-7">

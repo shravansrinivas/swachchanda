@@ -8,6 +8,7 @@ import {
   songTitle,
   type Bilingual,
 } from '../data/artists'
+import { inAppBrowser } from '../lib/browser'
 import { enterEkanthaFullscreen } from '../lib/fullscreen'
 import { useLanguage } from '../lib/language'
 import { usePlayer } from '../lib/player'
@@ -38,6 +39,7 @@ export function PlayerDock() {
     currentTime,
     duration,
     embedBlocked,
+    startBlocked,
     toggle,
     stop,
     next,
@@ -49,6 +51,9 @@ export function PlayerDock() {
   const navigate = useNavigate()
   const playing = status === 'playing'
   const failed = status === 'error'
+  // Between the tap and the first sound there is nothing to show as progress,
+  // so the deck says it is working instead of sitting at zero looking dead.
+  const threading = status === 'loading'
   const song = nowPlaying?.song
 
   const title = song ? songTitle(song) : { en: t.idleLabel, kn: t.idleLabel }
@@ -96,11 +101,15 @@ export function PlayerDock() {
         role="region"
         aria-label={t.nowPlaying}
       >
-        <div aria-hidden="true" className="h-[2px] w-full bg-dust/15">
-          <div
-            className="h-full bg-dial transition-[width] duration-500 ease-linear"
-            style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
-          />
+        <div aria-hidden="true" className="h-[2px] w-full overflow-hidden bg-dust/15">
+          {threading ? (
+            <div className="tape-threading h-full w-1/4 bg-dial/80" />
+          ) : (
+            <div
+              className="h-full bg-dial transition-[width] duration-500 ease-linear"
+              style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+            />
+          )}
         </div>
 
         <div className="mx-auto flex max-w-[860px] items-center gap-2 px-3 py-2">
@@ -114,7 +123,7 @@ export function PlayerDock() {
             className="flex min-w-0 flex-1 items-center gap-2 rounded-[4px] border border-dust/20 bg-tape/50 py-1 pr-2 pl-1.5 text-left transition-colors hover:border-dial/40"
           >
             <span className="shrink-0 text-dial">
-              <CassetteReel wound={1 - progress} playing={playing} size={22} />
+              <CassetteReel wound={1 - progress} playing={playing} threading={threading} size={22} />
             </span>
 
             <span className="flex min-w-0 flex-1 items-center gap-2 rounded-[2px] bg-label/92 px-2 py-1">
@@ -134,8 +143,12 @@ export function PlayerDock() {
                   {title.en}
                 </span>
                 {/* The artist, which the minimised deck used to leave out. */}
+                {/* While loading the label says what the deck is doing. The
+                    artist name is on screen either way, on the cassette in the
+                    open deck; what is missing at this moment is any sign that
+                    the tap did anything at all. */}
                 <span className="hand hand-second block truncate text-[0.78rem] leading-tight">
-                  {nowPlaying ? nowPlaying.billing.en : statusLine}
+                  {threading ? t.loadingShort : nowPlaying ? nowPlaying.billing.en : statusLine}
                 </span>
               </span>
 
@@ -148,7 +161,7 @@ export function PlayerDock() {
             </span>
 
             <span className="hidden shrink-0 text-dial/70 min-[420px]:block">
-              <CassetteReel wound={progress} playing={playing} size={22} />
+              <CassetteReel wound={progress} playing={playing} threading={threading} size={22} />
             </span>
           </button>
 
@@ -165,7 +178,9 @@ export function PlayerDock() {
               <path d="M7 6v12M18 6l-8 6 8 6z" fill="currentColor" />
             </TransportButton>
 
-            {failed ? (
+            {/* A silent refusal to start gets the same escape hatch as a real
+                embed failure: from the sofa the two are the same thing. */}
+            {failed || (startBlocked && inAppBrowser()) ? (
               <a
                 href={`https://www.youtube.com/watch?v=${song?.youtubeId}`}
                 target="_blank"
@@ -336,11 +351,16 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
     index,
     playOrder,
     play,
+    startBlocked,
   } = usePlayer()
 
   const playing = status === 'playing'
+  const threading = status === 'loading'
   const artist = nowPlaying?.artist
   const song = nowPlaying?.song
+  // Only after a play has actually gone nowhere. Sniffing the user agent is
+  // unreliable, so it never gates anything and never speaks up on a hunch.
+  const trappedIn = startBlocked ? inAppBrowser() : null
 
   const title: Bilingual = song ? songTitle(song) : { en: t.idleLabel, kn: t.idleLabel }
   // Every billed name, not just the first: this is the one place with room.
@@ -363,12 +383,16 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
         className="absolute inset-0 cursor-default"
       />
 
-      <div className="grain animate-[player-rise_320ms_cubic-bezier(0.22,1,0.36,1)] relative max-h-[92svh] overflow-y-auto rounded-t-xl border-t border-dust/20 bg-tape/80 px-5 pt-3 pb-7 backdrop-blur-xl">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-dust/30" />
+      <div className="grain animate-[player-rise_320ms_cubic-bezier(0.22,1,0.36,1)] relative max-h-[94svh] overflow-y-auto rounded-t-xl border-t border-dust/20 bg-tape/80 px-5 pt-3 pb-7 sm:max-h-[92svh] backdrop-blur-xl">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-dust/30 sm:mb-4" />
 
-        <div className="mx-auto grid w-full max-w-[1180px] grid-cols-[minmax(0,1fr)] gap-6 sm:grid-cols-[minmax(0,1fr)_380px] sm:items-start sm:gap-8 lg:grid-cols-[minmax(0,1fr)_380px_minmax(240px,300px)] lg:items-stretch">
-          {/* Tape and transport. First in the DOM so a phone meets it first. */}
-          <div className="sm:order-2">
+        <div className="mx-auto grid w-full max-w-[1180px] grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,1fr)_380px] sm:items-start sm:gap-8 lg:grid-cols-[minmax(0,1fr)_380px_minmax(240px,300px)] lg:items-stretch">
+          {/* Tape and transport. First in the DOM so a phone meets it first.
+              Every block carries an explicit order for the stacked layout too:
+              on a phone the queue is the one thing here that is a screen tall,
+              and left in DOM order it sat between the transport and the mood
+              row, burying the mood picker and the way into Ekantha under it. */}
+          <div className="order-1 sm:order-2">
             {jammed ? (
               <TapeJam
                 title={offline ? t.offlineTitle : t.stalledTitle}
@@ -384,6 +408,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
               <CassetteBody
                 progress={progress}
                 playing={playing}
+                threading={threading}
                 side={statusLine}
                 title={title}
                 artist={artistName}
@@ -394,6 +419,24 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
             <SeekBar />
             <TapeStats position={index} total={playOrder.length} />
 
+            {trappedIn && (
+              <div className="mt-4 rounded-[3px] border border-dial/35 bg-dial/10 px-3.5 py-3">
+                <p className={`stamp text-dial ${kn ? 'kn tracking-normal' : ''}`}>{t.inAppTitle}</p>
+                <p className={`mt-1.5 text-sm leading-relaxed text-label/85 ${kn ? 'kn' : ''}`}>
+                  {t.inAppBody(trappedIn)}
+                </p>
+                {song && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${song.youtubeId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`mt-2.5 inline-block font-mono text-xs text-verdigris underline decoration-verdigris/40 underline-offset-[3px] transition-colors hover:text-dial ${kn ? 'kn' : ''}`}
+                  >
+                    {t.openOnYoutube}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Transport. Directly under the tape in DOM order, so on a phone it
@@ -401,7 +444,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
               spans every column, because it drives the whole panel rather than
               just the tape. Left at the end of the DOM it sat below the queue
               and the credits, a screen and a half down. */}
-          <div className="border-t border-dust/15 pt-5 sm:order-4 sm:col-span-2 sm:mt-1 lg:col-span-3">
+          <div className="order-2 border-t border-dust/15 pt-3 sm:order-4 sm:pt-5 sm:col-span-2 sm:mt-1 lg:col-span-3">
             <div className="flex items-center justify-center gap-2">
             <ShuffleButton size="md" />
 
@@ -456,36 +499,53 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
           </div>
           </div>
 
-          {/* The queue, alongside the tape rather than under it.
-              On lg the inner list is absolutely positioned so it contributes no
-              height of its own: the row is sized by the cassette column, and the
-              queue scrolls inside exactly that height. Left in flow it stretched
-              the row to 60-odd songs tall and ran off the panel. */}
-          <div className="relative min-h-0 sm:order-3 sm:col-span-2 lg:col-span-1 lg:self-stretch">
-            <div className="max-h-[38svh] lg:absolute lg:inset-0 lg:max-h-none">
+          {/* The queue, alongside the tape rather than under it, and last of
+              all when stacked.
+              The inner wrapper needs a *definite* height, not a max-height:
+              QueueList is a full-height flex column whose list scrolls inside
+              it, and `h-full` against a max-height resolves to auto. With only
+              `max-h` it laid out all sixty-odd rows at full height and simply
+              overflowed, which on a phone made this panel 5,400px tall and put
+              the mood row and the Ekantha button a thousand pixels below the
+              fold. On lg the absolute inset does the same job. */}
+          <div className="relative order-4 min-h-0 sm:order-3 sm:col-span-2 lg:col-span-1 lg:self-stretch">
+            <div className="h-[34svh] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
               <QueueList />
             </div>
           </div>
 
-          {/* What is playing, and where else to hear it. */}
-          <div className="sm:order-1">
+          {/* What is playing, where else to hear it, the mood row and the way
+              into Ekantha. Second when stacked, so all of that is a short scroll
+              from the transport rather than below the whole queue. */}
+          {/* A flex column only when stacked, so the outbound links can be sent
+              to the end on a phone: what you *do* here (pick a mood, step into
+              Ekantha, close) belongs above where you go to hear the song
+              somewhere else. From sm it is a plain block again and the reading
+              order is the authored one. */}
+          <div className="order-3 flex flex-col sm:order-1 sm:block">
             {artist && song && (
               <>
-                <BiText
-                  value={title}
-                  className={`text-[1.5rem] leading-tight text-label ${kn ? 'kn-display' : 'font-display font-medium tracking-[-0.02em]'}`}
-                  secondaryClassName="text-[1.05rem] text-dust"
-                />
+                {/* Hidden when stacked: the cassette directly above already
+                    carries the title in handwriting, and printing it again at
+                    display size pushed the mood row and Ekantha off a short
+                    phone for no information. */}
+                <div className="hidden sm:block">
+                  <BiText
+                    value={title}
+                    className={`text-[1.5rem] leading-tight text-label ${kn ? 'kn-display' : 'font-display font-medium tracking-[-0.02em]'}`}
+                    secondaryClassName="text-[1.05rem] text-dust"
+                  />
+                </div>
 
                 <Link
                   to={`/artists/${artist.id}`}
                   onClick={onClose}
-                  className={`mt-2 inline-block text-[1.05rem] text-dial transition-colors hover:text-label ${kn ? 'kn-display' : 'font-display'}`}
+                  className={`mt-2 self-start text-[1.05rem] text-dial transition-colors hover:text-label sm:inline-block ${kn ? 'kn-display' : 'font-display'}`}
                 >
                   {artist.name[lang]} &rarr;
                 </Link>
 
-                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="order-last mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 sm:order-none">
                   <span className={`stamp text-dust/80 ${kn ? 'kn tracking-normal' : ''}`}>
                     {t.listenOn}
                   </span>
@@ -505,7 +565,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
                 </div>
 
                 {artistProfiles(artist).length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="order-last mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 sm:order-none">
                     {artistProfiles(artist).map(({ profile, url }) => (
                       <a
                         key={profile}
@@ -523,7 +583,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
             )}
 
             {/* Change direction without leaving the player. */}
-            <div className="mt-6 border-t border-dust/15 pt-4">
+            <div className="mt-4 border-t border-dust/15 pt-3 sm:mt-6 sm:pt-4">
               <MoodRow label={t.moodsLabel} />
             </div>
 
@@ -532,7 +592,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
                 already said they came to listen, which is the moment the
                 quieter room is most worth pointing at, and the alternative was
                 closing the player to go and find it in the header. */}
-            <div className="mt-5 flex flex-wrap gap-2.5">
+            <div className="mt-2.5 flex flex-wrap gap-2.5 sm:mt-5">
               <button
                 type="button"
                 onClick={() => {
