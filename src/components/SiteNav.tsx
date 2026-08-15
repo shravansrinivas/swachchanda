@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
+import { enterEkanthaFullscreen } from '../lib/fullscreen'
 import { useLanguage } from '../lib/language'
 import { EkanthaIcon } from './EkanthaIcon'
 import { LanguageToggle } from './LanguageToggle'
@@ -71,6 +72,9 @@ export function SiteNav() {
               /ekantha at all, so an "active" state here could never be seen. */}
           <Link
             to="/ekantha"
+            // Asked for here rather than on the page, because a browser only
+            // grants fullscreen inside a real gesture.
+            onClick={enterEkanthaFullscreen}
             aria-label={t.ekanthaEnter}
             title={`${t.ekanthaEnter} · ${t.ekanthaNameAlt}`}
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-dial/50 bg-dial/10 px-3 py-1.5 text-dial transition-colors hover:bg-dial hover:text-tape"

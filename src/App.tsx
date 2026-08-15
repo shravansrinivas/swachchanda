@@ -73,9 +73,19 @@ function Shell() {
       {!isEkantha && <SiteNav />}
       <ScrollToTop />
 
-      {/* Every route but home pads for the deck. Home sizes itself to exactly
-          one viewport and carries its own clearance, so it never scrolls. */}
-      <main className={isHome ? 'min-h-0 flex-1' : isEkantha ? '' : 'pb-28'}>
+      {/* Every route but home pads for the deck, and the padding carries the
+          safe-area inset so the deck clears a home indicator. Home sizes itself
+          to exactly one viewport and carries its own clearance, so it never
+          scrolls. */}
+      <main
+        className={
+          isHome
+            ? 'min-h-0 flex-1'
+            : isEkantha
+              ? ''
+              : 'pb-[calc(7rem+env(safe-area-inset-bottom))]'
+        }
+      >
         <Routes>
           <Route path="/" element={<HomePage active={rotating} />} />
           <Route path="/artists" element={<ArtistsPage />} />

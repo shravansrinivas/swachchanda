@@ -39,7 +39,7 @@ export const moodLabels: Record<Mood, Bilingual> = {
   restless: { kn: 'ಚಡಪಡಿಕೆ', en: 'Restless' },
   joy: { kn: 'ಖುಷಿ', en: 'Bright' },
   rain: { kn: 'ಮಳೆ', en: 'Rain' },
-  road: { kn: 'ದಾರಿ', en: 'On the road' },
+  road: { kn: 'ದಾರಿಯಲ್ಲಿ', en: 'On the road' },
   focus: { kn: 'ಕೆಲಸ', en: 'Work and focus' },
 }
 

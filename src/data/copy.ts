@@ -147,8 +147,17 @@ export interface Copy {
   ekanthaWhat: string
   ekanthaEnter: string
   ekanthaLeave: string
+  fullscreenEnter: string
+  fullscreenExit: string
+  /** Why the queue cannot be reordered while shuffle is on. */
+  queueShuffled: string
   feedbackLine: string
   feedbackAction: string
+  /** Credit roles, shown before a name on a song row. */
+  creditFeatured: string
+  creditWith: string
+  creditWords: string
+  creditMusic: string
   expandPlayer: string
   collapsePlayer: string
   /** Shown on the cassette label before anything has been played. */
@@ -165,6 +174,8 @@ export interface Copy {
   sideB: string
 
   /** Artist cards */
+  alsoCreditedHeading: string
+  alsoCreditedNote: string
   tracksLabel: string
   listenOn: string
   searchSuffix: string
@@ -282,9 +293,16 @@ const en: Copy = {
     'A quieter room inside this one. The tape, the words on it, and the controls. No lists, no menus, no counting. Leave whenever you like; the song keeps playing either way.',
   ekanthaEnter: 'Enter Ekantha',
   ekanthaLeave: 'Back to the site',
+  fullscreenEnter: 'Fill the screen',
+  fullscreenExit: 'Leave full screen',
+  queueShuffled: 'Shuffled, so there is no order to hold. Turn shuffle off to arrange it.',
   feedbackLine:
     'Feedback of any kind, and corrections most of all. A misspelt name, a wrong credit, a song that should not be here, a page that reads badly on your phone. Tell me and I will fix it.',
   feedbackAction: 'Send feedback',
+  creditFeatured: 'ft.',
+  creditWith: 'with',
+  creditWords: 'words',
+  creditMusic: 'music',
   expandPlayer: 'Open the tape',
   collapsePlayer: 'Close the tape',
   idleLabel: 'Nothing queued',
@@ -297,6 +315,9 @@ const en: Copy = {
   sideA: 'Side A',
   sideB: 'Side B',
 
+  alsoCreditedHeading: 'Also credited',
+  alsoCreditedNote:
+    'Singers, players and writers credited on a song here without a page of their own yet. Tap a name to see what they are on.',
   tracksLabel: 'Tracks',
   listenOn: 'Also on',
   searchSuffix: 'search',
@@ -414,9 +435,16 @@ const kn: Copy = {
     'ಇದರೊಳಗೇ ಇನ್ನಷ್ಟು ಸದ್ದಿಲ್ಲದ ಒಂದು ಕೋಣೆ. ಟೇಪು, ಅದರ ಮೇಲಿನ ಬರಹ, ಮತ್ತು ಗುಂಡಿಗಳು. ಪಟ್ಟಿ ಇಲ್ಲ, ಮೆನು ಇಲ್ಲ, ಎಣಿಕೆ ಇಲ್ಲ. ಬೇಕಾದಾಗ ಹೊರಬನ್ನಿ; ಹಾಡು ಹಾಗೇ ನಡೀತಿರುತ್ತೆ.',
   ekanthaEnter: 'ಏಕಾಂತಕ್ಕೆ ಹೋಗಿ',
   ekanthaLeave: 'ಸೈಟಿಗೆ ವಾಪಸ್',
+  fullscreenEnter: 'ಪೂರ್ತಿ ಪರದೆ',
+  fullscreenExit: 'ಪೂರ್ತಿ ಪರದೆಯಿಂದ ಹೊರಗೆ',
+  queueShuffled: 'ಶಫಲ್ ಆನ್ ಇದೆ, ಹಾಗಾಗಿ ಹಿಡಿದಿಡೋಕೆ ಕ್ರಮ ಇಲ್ಲ. ಜೋಡಿಸಬೇಕಾದರೆ ಶಫಲ್ ಆಫ್ ಮಾಡಿ.',
   feedbackLine:
     'ಯಾವ ಅನಿಸಿಕೆಯಾದರೂ ಸರಿ, ತಿದ್ದುಪಡಿಯಾದರೆ ಇನ್ನೂ ಒಳ್ಳೇದು. ಹೆಸರಿನ ಕಾಗುಣಿತ, ತಪ್ಪು ಕ್ರೆಡಿಟ್, ಇಲ್ಲಿ ಇರಬಾರದ ಹಾಡು, ಫೋನಿನಲ್ಲಿ ಸರಿಯಾಗಿ ಕಾಣದ ಪುಟ. ಹೇಳಿ, ಸರಿ ಮಾಡ್ತೀನಿ.',
   feedbackAction: 'ಅನಿಸಿಕೆ ಕಳಿಸಿ',
+  creditFeatured: 'ಜೊತೆಗೆ',
+  creditWith: 'ಜೊತೆ',
+  creditWords: 'ಸಾಹಿತ್ಯ',
+  creditMusic: 'ಸಂಗೀತ',
   expandPlayer: 'ಟೇಪು ತೆರೆಯಿರಿ',
   collapsePlayer: 'ಟೇಪು ಮುಚ್ಚಿ',
   idleLabel: 'ಏನೂ ಹಾಕಿಲ್ಲ',
@@ -429,6 +457,9 @@ const kn: Copy = {
   sideA: 'ಎ ಸೈಡು',
   sideB: 'ಬಿ ಸೈಡು',
 
+  alsoCreditedHeading: 'ಇವರ ಹೆಸರೂ ಇದೆ',
+  alsoCreditedNote:
+    'ಇಲ್ಲಿನ ಯಾವುದಾದರೂ ಹಾಡಿನಲ್ಲಿ ಹೆಸರಿರುವ ಗಾಯಕರು, ವಾದಕರು, ಬರಹಗಾರರು. ಹೆಸರು ಒತ್ತಿದರೆ ಅವರು ಯಾವ ಹಾಡಲ್ಲಿ ಇದ್ದಾರೆ ಅಂತ ಕಾಣುತ್ತೆ.',
   tracksLabel: 'ಹಾಡುಗಳು',
   listenOn: 'ಇಲ್ಲೂ ಸಿಗುತ್ತೆ',
   searchSuffix: 'ಹುಡುಕಾಟ',

@@ -56,7 +56,7 @@ export const playlistCredits: CreditGroup = {
 
 export const inspirationCredits: CreditGroup = {
   id: 'inspiration',
-  heading: { kn: 'ಸ್ಫೂರ್ತಿ', en: 'Made in the shade of' },
+  heading: { kn: 'ಸ್ಫೂರ್ತಿ', en: 'Inspo' },
   intro: {
     kn: 'ಕನ್ನಡ ಸಂಗೀತಕ್ಕಾಗಿ ಅಂತರ್ಜಾಲದಲ್ಲಿ ಇವರು ಮೊದಲು ಏನನ್ನೋ ಕಟ್ಟಿದರು, ಅದೂ ಬಹಳ ಚೆನ್ನಾಗಿ. ಅವು ಇದ್ದುದರಿಂದಲೇ ಇದು ಇದೆ.',
     en: 'Two people built something for Kannada music on the internet before this, and did it better than most. This one exists because those did.',

@@ -1,5 +1,12 @@
 import { Link, useParams } from 'react-router-dom'
-import { artistProfiles, findArtist, platformLabels, platformLinks, profileLabels } from '../data/artists'
+import {
+  artistProfiles,
+  findArtist,
+  platformLabels,
+  platformLinks,
+  profileLabels,
+  songsBy,
+} from '../data/artists'
 import { useLanguage } from '../lib/language'
 import { TrackRow } from '../components/TrackRow'
 
@@ -7,6 +14,8 @@ export function ArtistPage() {
   const { artistId } = useParams()
   const { t, lang, kn } = useLanguage()
   const artist = findArtist(artistId)
+  // Everything they are credited on, including other people's records.
+  const songs = artist ? songsBy(artist.id) : []
 
   if (!artist) {
     return (
@@ -43,22 +52,28 @@ export function ArtistPage() {
           {artist.name[kn ? 'en' : 'kn']}
         </p>
         <p className={`stamp mt-3 text-dust/80 ${kn ? 'kn tracking-normal' : ''}`}>
-          {t.artistTrackCount(artist.tracks.length)}
+          {t.artistTrackCount(songs.length)}
         </p>
       </header>
 
-      <p className={`mt-6 text-[1rem] leading-relaxed text-label/85 ${kn ? 'kn' : ''}`}>
-        {artist.blurb[lang]}
-      </p>
+      {/* Optional: plenty of people here are credited on somebody else's
+          record and there is nothing sourced to say about them beyond the name. */}
+      {artist.blurb && (
+        <p className={`mt-6 text-[1rem] leading-relaxed text-label/85 ${kn ? 'kn' : ''}`}>
+          {artist.blurb[lang]}
+        </p>
+      )}
 
       <section className="mt-8">
         <h2 className={`stamp mb-1 text-dial ${kn ? 'kn tracking-normal' : ''}`}>
           {t.tracksLabel}
         </h2>
         <ul>
-          {artist.tracks.map((track, i) => (
-            <li key={track.youtubeId} className="border-b border-dust/12 last:border-b-0">
-              <TrackRow artist={artist} track={track} index={i} />
+          {songs.map((item, i) => (
+            <li key={item.key} className="border-b border-dust/12 last:border-b-0">
+              {/* showArtist, because half of these are collaborations and this
+                  page is only one of the names on them. */}
+              <TrackRow item={item} index={i} showArtist />
             </li>
           ))}
         </ul>

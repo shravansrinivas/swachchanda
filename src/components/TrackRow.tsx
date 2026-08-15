@@ -1,5 +1,5 @@
-import type { Artist, Track } from '../data/artists'
-import { trackTitle } from '../data/artists'
+import type { QueueItem, ResolvedCredit } from '../data/artists'
+import { songTitle } from '../data/artists'
 import { moodLabels } from '../data/taxonomy'
 import { useLanguage } from '../lib/language'
 import { usePlayer } from '../lib/player'
@@ -11,21 +11,19 @@ const pad = (n: number) => String(n + 1).padStart(2, '0')
 
 /**
  * One song. Shared by the artist card, the artist page and the song list so a
- * track behaves identically wherever it appears.
+ * song behaves identically wherever it appears.
  *
- * A track marked `unplayable` still renders, because it is still part of the
- * roster and the artist still deserves the credit, but it is not a button:
+ * A song marked `unplayable` still renders, because it is still part of the
+ * roster and the artists still deserve the credit, but it is not a button:
  * there is nothing to tap and nothing to queue, only a link out to YouTube.
  */
 export function TrackRow({
-  artist,
-  track,
+  item,
   index,
   showArtist = false,
   showTags = false,
 }: {
-  artist: Artist
-  track: Track
+  item: QueueItem
   index: number
   showArtist?: boolean
   /** Show mood tags. Useful on the song list, noise on an artist page. */
@@ -34,43 +32,49 @@ export function TrackRow({
   const { t, kn, lang } = useLanguage()
   const { nowPlaying, status, play } = usePlayer()
 
-  const active = nowPlaying?.key === `${artist.id}:${track.youtubeId}`
+  const { song } = item
+  const active = nowPlaying?.key === item.key
   const spinning = active && status === 'playing'
-  const title = kn ? (track.titleKn ?? track.title) : track.title
+  const title = kn ? (song.titleKn ?? song.title) : song.title
 
   const body = (
     <>
       <span className="stamp w-5 shrink-0 text-dust/80">{pad(index)}</span>
 
       <Thumbnail
-        youtubeId={track.youtubeId}
+        youtubeId={song.youtubeId}
         alt={title}
         className="w-14 shrink-0"
-        dim={track.unplayable}
+        dim={song.unplayable}
       />
 
       <span className="min-w-0 flex-1">
         {/* Titles and names are content, so they carry both scripts. */}
         <BiText
-          value={trackTitle(track)}
+          value={songTitle(song)}
           className="text-[0.98rem]"
           secondaryClassName="text-[0.82rem] text-dust/85"
         />
         {showArtist && (
-          <BiText
-            value={artist.name}
-            className="mt-0.5 text-xs text-dust"
-            secondaryClassName="text-[0.7rem] text-dust/80"
-          />
+          <>
+            <BiText
+              value={item.billing}
+              className="mt-0.5 text-xs text-dust"
+              secondaryClassName="text-[0.7rem] text-dust/80"
+            />
+            {/* Everyone else on the record, on their own line. A song with four
+                names is common here and the old shape showed one of them. */}
+            <SupportingCredits credits={item.credits} />
+          </>
         )}
-        {showTags && !track.unplayable && (
+        {showTags && !song.unplayable && (
           <span className="mt-1 block truncate text-[11px] text-dust/80">
-            {track.moods
+            {song.moods
               .map((mood) => `${moodLabels[mood][lang]} / ${moodLabels[mood][lang === 'kn' ? 'en' : 'kn']}`)
               .join(' · ')}
           </span>
         )}
-        {track.unplayable && (
+        {song.unplayable && (
           <span className={`stamp mt-0.5 block truncate text-dust/80 ${kn ? 'kn tracking-normal' : ''}`}>
             {t.playerBlocked}
           </span>
@@ -79,12 +83,12 @@ export function TrackRow({
     </>
   )
 
-  if (track.unplayable) {
+  if (song.unplayable) {
     return (
       <div className="flex min-h-[52px] w-full items-center gap-3 py-1.5 text-left text-dust/85">
         {body}
         <a
-          href={`https://www.youtube.com/watch?v=${track.youtubeId}`}
+          href={`https://www.youtube.com/watch?v=${song.youtubeId}`}
           target="_blank"
           rel="noreferrer"
           aria-label={`${t.openOnYoutube}: ${title}`}
@@ -108,7 +112,7 @@ export function TrackRow({
   return (
     <button
       type="button"
-      onClick={() => play(artist, track)}
+      onClick={() => play(item)}
       aria-pressed={active}
       className={`group flex min-h-[52px] w-full items-center gap-3 py-1.5 text-left transition-colors ${
         active ? 'text-dial' : 'text-label/90 hover:text-dial'
@@ -132,5 +136,30 @@ export function TrackRow({
         )}
       </span>
     </button>
+  )
+}
+
+/**
+ * The names after the billed lead: featured singers, collaborators, whoever
+ * wrote the words. Renders nothing when there is nobody, which is most songs.
+ */
+function SupportingCredits({ credits }: { credits: ResolvedCredit[] }) {
+  const { t, kn, lang } = useLanguage()
+  const rest = credits.filter((credit) => credit.role !== 'lead')
+  if (!rest.length) return null
+
+  const label: Record<Exclude<ResolvedCredit['role'], 'lead'>, string> = {
+    featured: t.creditFeatured,
+    with: t.creditWith,
+    words: t.creditWords,
+    music: t.creditMusic,
+  }
+
+  return (
+    <span className={`mt-0.5 block truncate text-[11px] text-dust/80 ${kn ? 'kn' : ''}`}>
+      {rest
+        .map((credit) => `${label[credit.role as keyof typeof label]} ${credit.artist.name[lang]}`)
+        .join(' · ')}
+    </span>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Artist, Track } from '../data/artists'
+import type { QueueItem, Song } from '../data/artists'
 
 /**
  * In-page playback via the YouTube IFrame Player API.
@@ -116,17 +116,10 @@ function createHost(): HTMLDivElement {
   return host
 }
 
-export interface NowPlaying {
-  artist: Artist
-  track: Track
-  /** `artistId:youtubeId`, stable identity for one queued song. */
-  key: string
-}
-
 export type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error'
 
 export interface YouTubePlayerApi {
-  nowPlaying: NowPlaying | null
+  nowPlaying: QueueItem | null
   status: PlayerStatus
   /** 0 to 1, for the tape path. 0 when duration is unknown. */
   progress: number
@@ -142,13 +135,13 @@ export interface YouTubePlayerApi {
   embedBlocked: boolean
   /** Increments each time a song runs to its end, so a caller can auto-advance. */
   endedCount: number
-  play: (artist: Artist, track: Track) => void
+  play: (item: QueueItem) => void
   /**
    * Put a song on the deck without starting it: the opening suggestion, and the
    * new suggestion whenever the mood changes. Deliberately does not touch
    * requestRef, so the next press of play still goes down the normal load path.
    */
-  cue: (artist: Artist, track: Track) => void
+  cue: (item: QueueItem) => void
   /**
    * Has anything been put on the deck yet, this instant?
    *
@@ -163,11 +156,11 @@ export interface YouTubePlayerApi {
   seekTo: (seconds: number) => void
   /** Nudge by a delta, clamped to the track. Powers rewind and fast-forward. */
   seekBy: (delta: number) => void
-  isCurrent: (track: Track) => boolean
+  isCurrent: (song: Song) => boolean
 }
 
 export function useYouTubePlayer(): YouTubePlayerApi {
-  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
+  const [nowPlaying, setNowPlaying] = useState<QueueItem | null>(null)
   const [status, setStatus] = useState<PlayerStatus>('idle')
   const [progress, setProgress] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -228,13 +221,13 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     return () => window.clearInterval(id)
   }, [status])
 
-  const play = useCallback((artist: Artist, track: Track) => {
-    // A track known not to embed never reaches the player at all. It stays
+  const play = useCallback((item: QueueItem) => {
+    // A song known not to embed never reaches the player at all. It stays
     // visible in the lists, but it is not queueable.
-    if (track.unplayable) return
+    const { song, key } = item
+    if (song.unplayable) return
 
     cuedRef.current = true
-    const key = `${artist.id}:${track.youtubeId}`
 
     // Re-tapping the current track toggles rather than restarting it, which is
     // what a listener expects from a row they are already playing.
@@ -255,7 +248,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     }
 
     requestRef.current = key
-    setNowPlaying({ artist, track, key })
+    setNowPlaying(item)
     setStatus('loading')
     setProgress(0)
     setCurrentTime(0)
@@ -269,8 +262,8 @@ export function useYouTubePlayer(): YouTubePlayerApi {
         if (requestRef.current !== key) return
 
         if (playerRef.current) {
-          if (readyRef.current) playerRef.current.loadVideoById(track.youtubeId)
-          else pendingRef.current = track.youtubeId
+          if (readyRef.current) playerRef.current.loadVideoById(song.youtubeId)
+          else pendingRef.current = song.youtubeId
           return
         }
 
@@ -278,7 +271,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
         const mount = hostRef.current.firstElementChild as HTMLElement
 
         playerRef.current = new YT.Player(mount, {
-          videoId: track.youtubeId,
+          videoId: song.youtubeId,
           playerVars: {
             enablejsapi: 1,
             playsinline: 1, // iOS Safari plays inline instead of going fullscreen
@@ -319,9 +312,15 @@ export function useYouTubePlayer(): YouTubePlayerApi {
       })
   }, [])
 
-  const cue = useCallback((artist: Artist, track: Track) => {
+  const cue = useCallback((item: QueueItem) => {
     cuedRef.current = true
-    setNowPlaying({ artist, track, key: `${artist.id}:${track.youtubeId}` })
+    // Cueing means the deck now holds this *and* nothing is coming out of the
+    // speaker. Without the pause, changing the mood while the one autoplay
+    // attempt was still in flight let the previous track start a second later,
+    // playing under the newly cued song's name. Loading is left alone: the next
+    // press of play loads the cued track, which is what `toggle` is for.
+    if (playerRef.current && readyRef.current) playerRef.current.pauseVideo()
+    setNowPlaying(item)
   }, [])
 
   const toggle = useCallback(() => {
@@ -332,7 +331,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
     // from.
     const cued = nowPlaying
     if (cued && requestRef.current !== cued.key) {
-      play(cued.artist, cued.track)
+      play(cued)
       return
     }
 
@@ -390,7 +389,7 @@ export function useYouTubePlayer(): YouTubePlayerApi {
   }, [])
 
   const isCurrent = useCallback(
-    (track: Track) => nowPlaying?.track.youtubeId === track.youtubeId,
+    (song: Song) => nowPlaying?.song.id === song.id,
     [nowPlaying],
   )
 

@@ -12,7 +12,7 @@ export interface Filters {
   /** Empty means "any". Multiple selections are OR'd within a group. */
   genres: Genre[]
   moods: Mood[]
-  /** Allowlist mode, only tracks explicitly marked `childSafe`. */
+  /** Allowlist mode, only songs explicitly marked `childSafe`. */
   familyOnly: boolean
 }
 
@@ -37,7 +37,7 @@ export function sortQueue(items: QueueItem[], sort: Sort): QueueItem[] {
   if (sort === 'roster') return items
   const collator = new Intl.Collator('en', { sensitivity: 'base' })
   const key = (item: QueueItem) =>
-    sort === 'title' ? item.track.title : `${item.artist.name.en} ${item.track.title}`
+    sort === 'title' ? item.song.title : `${item.billing.en} ${item.song.title}`
   return [...items].sort((a, b) => collator.compare(key(a), key(b)))
 }
 
@@ -49,7 +49,16 @@ export interface PlayerValue extends YouTubePlayerApi {
   /** Position of the current song within `playOrder`, or -1. */
   index: number
   filters: Filters
-  setFilters: (next: Filters) => void
+  /**
+   * Change what is in the queue.
+   *
+   * `andPlay` says whether the choice is also a request to hear something. On
+   * the front page and in Ekantha a mood *is* the request, there is nothing
+   * else to press; on the song list the same control is a filter over a view
+   * you are reading, and starting a song under you there is an interruption.
+   * Left off, the new set is only cued.
+   */
+  setFilters: (next: Filters, andPlay?: boolean) => void
   sort: Sort
   setSort: (next: Sort) => void
   /** Drop a song from the queue for this session. */
@@ -81,12 +90,12 @@ export function usePlayer(): PlayerValue {
   return value
 }
 
-/** A track passes when it matches at least one selection in every active group. */
+/** A song passes when it matches at least one selection in every active group. */
 export function matchesFilters(item: QueueItem, filters: Filters): boolean {
-  const { track } = item
-  if (filters.familyOnly && !track.childSafe) return false
-  if (filters.genres.length && !filters.genres.some((g) => track.genres.includes(g))) return false
-  if (filters.moods.length && !filters.moods.some((m) => track.moods.includes(m))) return false
+  const { song } = item
+  if (filters.familyOnly && !song.childSafe) return false
+  if (filters.genres.length && !filters.genres.some((g) => song.genres.includes(g))) return false
+  if (filters.moods.length && !filters.moods.some((m) => song.moods.includes(m))) return false
   return true
 }
 

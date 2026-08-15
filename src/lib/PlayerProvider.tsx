@@ -35,8 +35,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    *
    * The queue stays *derived* from the filters, the sort and the shuffle; these
    * two are an overlay on top of it rather than a replacement for it. That way
-   * changing a filter cannot be silently undone by a stale hand-built list, and
-   * the edits can be dropped in one move.
+   * changing a filter cannot be silently undone by a stale hand-built list.
+   *
+   * They deliberately survive a filter change. Arranging a queue is work, and
+   * having it thrown away for picking a different mood was the single most
+   * annoying thing the deck did. The overlay shape is what makes that safe:
+   * `manualOrder` ranks whatever is present and appends the rest, so a song the
+   * new mood brings in is never swallowed.
+   *
+   * `removed` surviving does mean a song you dropped stays dropped even after
+   * you pick a mood it belongs to, so the list can be quietly shorter than the
+   * filter claims. That is the accepted cost, and `resetQueue` is offered the
+   * whole time there is anything to undo.
    */
   const [removed, setRemoved] = useState<string[]>([])
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
@@ -46,7 +56,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const base = shuffleOn ? seededShuffle(ordered, seed) : ordered
     const kept = removed.length ? base.filter((item) => !removed.includes(item.key)) : base
 
-    if (!manualOrder) return kept
+    // A hand order is not applied while shuffling. Ranking the songs it names
+    // would put them back in that exact sequence and leave shuffle doing
+    // nothing, which is why the queue hides its reorder controls under shuffle.
+    // The arrangement is kept, not discarded: turn shuffle off and it returns.
+    if (!manualOrder || shuffleOn) return kept
 
     // Respect the hand order for anything still present, then append whatever
     // the filters have since let back in, so a new song is never swallowed.
@@ -81,14 +95,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setManualOrder(null)
   }, [])
 
-  const setFilters = useCallback((next: Filters) => {
+  /**
+   * Set when the filter change was itself a request to hear something, so the
+   * effect below can act on the *new* order rather than the stale one. A ref
+   * rather than state: it is read once by the effect that the same change
+   * schedules, and must not cause a render of its own.
+   */
+  const playOnNextFilters = useRef(false)
+
+  const setFilters = useCallback((next: Filters, andPlay = false) => {
+    playOnNextFilters.current = andPlay
     setFiltersState(next)
-    // A different set of songs deserves a clean queue; carrying removals across
-    // a filter change would hide songs the reader just asked to see.
-    setRemoved([])
-    setManualOrder(null)
-    // A new filter set deserves a new shuffle, otherwise re-filtering replays
-    // the same order over a smaller list.
+    // Hand edits are not touched here. They used to be cleared on the argument
+    // that a different set of songs deserves a clean queue, which sounded right
+    // and meant that dragging a queue into shape and then picking a mood threw
+    // the arrangement away. `resetQueue` is the way back, and it is offered
+    // whenever there is anything to reset.
+    //
+    // The shuffle order is still regenerated: re-filtering without it replays
+    // the same sequence over a smaller list, which reads as broken shuffle.
     setSeed((s) => s + 1)
   }, [])
 
@@ -114,8 +139,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       for (let hop = 1; hop <= order.length; hop++) {
         const at = (((from + delta * hop) % order.length) + order.length) % order.length
         const item = order[at]
-        if (!item.track.unplayable) {
-          play(item.artist, item.track)
+        if (!item.song.unplayable) {
+          play(item)
           return
         }
       }
@@ -135,7 +160,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const firstOf = useCallback(
     (order: typeof queue) => {
-      const playable = order.filter((item) => !item.track.unplayable)
+      const playable = order.filter((item) => !item.song.unplayable)
       if (!playable.length) return null
       return playable[sessionStart(startKey, playable.length)]
     },
@@ -145,7 +170,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playFirstOf = useCallback(
     (order: typeof queue) => {
       const first = firstOf(order)
-      if (first) play(first.artist, first.track)
+      if (first) play(first)
     },
     [firstOf, play],
   )
@@ -170,23 +195,52 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // true by the time this runs; `nowPlaying` would still read null.
     if (hasCue()) return
     const first = firstOf(queue)
-    if (first) cue(first.artist, first.track)
+    if (first) cue(first)
   }, [cue, firstOf, hasCue])
 
-  // Changing the mood changes what is on the deck. Picking "late night" and
-  // being left holding the previous suggestion makes the choice feel inert, so
-  // the top of the new set is loaded straight away: played if something was
-  // already playing, cued if not.
+  /**
+   * What a change of filters does to the deck, which depends entirely on where
+   * the change came from.
+   *
+   * Called with `andPlay` (the front page, Ekantha) the mood *is* the request:
+   * there is no other control on those screens, so the new set starts. Called
+   * without it (the song list, the filter sheet) it is a filter over a view
+   * being read, and it only cues: the song list used to jump you off whatever
+   * you were listening to the moment you touched a chip.
+   *
+   * Cueing while something plays is deliberately skipped. `cue()` moves the
+   * label without loading anything, so cueing over a running song would leave
+   * the deck naming one song while a different one came out of the speaker.
+   *
+   * Every other state cues, including `loading`. Guarding that one too looked
+   * safer and was worse: the boot autoplay attempt holds `loading` for up to
+   * six seconds, so a mood tapped in the first moments after arriving left the
+   * deck showing a song from the set you had just moved away from. `cue()`
+   * pauses the player, which covers the case that guard was for.
+   */
   const lastFiltersRef = useRef(filters)
   useEffect(() => {
     if (lastFiltersRef.current === filters) return
     lastFiltersRef.current = filters
 
+    const andPlay = playOnNextFilters.current
+    playOnNextFilters.current = false
+
     const first = firstOf(playOrder)
     if (!first) return
-    if (status === 'playing') play(first.artist, first.track)
-    else cue(first.artist, first.track)
-  }, [filters, playOrder, status, play, cue, firstOf])
+
+    if (andPlay) {
+      // `play()` toggles when handed the song it is already playing, so a mood
+      // whose set opens on the current song would pause it. Nothing to do:
+      // that song is what was asked for and it is already sounding.
+      if (nowPlaying?.key === first.key && status === 'playing') return
+      play(first)
+      return
+    }
+
+    if (status === 'playing') return
+    cue(first)
+  }, [filters, playOrder, status, nowPlaying, play, cue, firstOf])
 
   /**
    * One attempt at starting the tape, per page load.
@@ -203,7 +257,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (autoAttempted.current || !nowPlaying || status !== 'idle') return
     autoAttempted.current = true
-    play(nowPlaying.artist, nowPlaying.track)
+    play(nowPlaying)
   }, [nowPlaying, status, play])
 
   // Roll on to the next song when one finishes. Guarded by a ref so the effect

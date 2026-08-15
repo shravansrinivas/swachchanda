@@ -34,8 +34,18 @@
     color: var(--color-label);
     font-family: var(--font-display);
     -webkit-font-smoothing: antialiased;
-    /* Never let the fixed player bar cover the last card. */
-    padding-bottom: env(safe-area-inset-bottom);
+    /* No padding-bottom here for the safe area.
+     *
+     * It used to carry `padding-bottom: env(safe-area-inset-bottom)` to keep
+     * the fixed player bar off the last card. On a phone with a home indicator
+     * that resolves to 34px and is added *below* a shell that is already
+     * exactly 100svh, so the front page scrolled by exactly the inset: the one
+     * screen that is supposed not to scroll. It never showed on a desktop or in
+     * device emulation, where the inset resolves to 0.
+     *
+     * The clearance belongs to whatever is above the deck instead, so it is
+     * inside the 100svh rather than added after it. See the pb-[calc(...)] on
+     * <main> in App.tsx and on the home screen. */
   }
 
   ::selection {

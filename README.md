@@ -9,38 +9,69 @@ pnpm install
 pnpm dev
 ```
 
+Suggesting a song, correcting a credit, or asking for your own song to be taken
+down needs no code and no account: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Adding artists and songs
 
-Everything lives in [`src/data/artists.ts`](src/data/artists.ts). Append to the
-`artists` array, no component changes needed. The minimum for a song is a title
-and an 11-character YouTube video id:
+Everything lives in [`src/data/artists.ts`](src/data/artists.ts): the people in
+`artists`, the songs in `songs`, and the association between them on each song.
+
+**Songs are not nested under an artist.** A song names its own credits, in
+billing order, and an artist page is a query over that (`songsBy`). Filing every
+song under exactly one artist was the old shape and it quietly lied: half of
+these are collaborations, and the second, third and fourth names were simply not
+on the site. Sumedh K sings on seven songs here and his page showed five.
 
 ```ts
+// in `artists`, whoever is not already there
+{ id: 'sanjana-doss', name: { kn: 'ಸಂಜನಾ ಡಾಸ್', en: 'Sanjana Doss' } }
+
+// in `songs`
 {
-  id: 'artist-slug',
-  name: { kn: 'ಕಲಾವಿದ', en: 'Artist' },
-  blurb: { kn: '…', en: '…' },
-  tracks: [
-    {
-      title: 'Song',
-      titleKn: 'ಹಾಡು',
-      youtubeId: 'dQw4w9WgXcQ',
-      genres: ['indiepop'],      // what it is , see src/data/taxonomy.ts
-      moods: ['latenight'],      // what it's for
-      childSafe: true,           // optional, see below
-    },
-  ],
-  links: { youtube: 'https://www.youtube.com/@channel' },
+  id: 'nange-allava',              // stable slug, this is the queue key
+  title: 'Nange Allava',
+  titleKn: 'ನಂಗೆ ಅಲ್ಲವಾ',
+  youtubeId: 'dQw4w9WgXcQ',
+  credits: [{ artist: 'sanjith-hegde' }, { artist: 'sanjana-doss', role: 'with' }],
+  genres: ['indiepop'],            // what it is, see src/data/taxonomy.ts
+  moods: ['longing'],              // what it's for
+  childSafe: true,                 // optional, see below
 }
 ```
 
-`genres` and `moods` are required so that adding a song forces a decision ,
-an untagged track would be invisible to every filter. The vocabulary lives in
+`blurb` on an artist is **optional**. Plenty of people here are credited on
+somebody else's record and there is nothing sourced to say about them beyond the
+name. A name with no write-up is an honest entry; an invented write-up is not.
+Artists with a blurb and a lead credit get a card on /artists, everyone else
+gets a line in "Also credited" and a page of their own.
+
+### Credit roles
+
+| role | means |
+|---|---|
+| `lead` (default) | billed first, who the song goes out under |
+| `with` | credited on the official release, role not asserted |
+| `featured` | the release says "ft." |
+| `words` | wrote the lyrics, and a source says so |
+| `music` | composed it, and a source says so |
+
+`with` is deliberately vague because most sources are: a YouTube title reading
+`Song | A | B` does not say who sang and who played. Claiming a role we do not
+know is worse than saying plainly that they are on the record. `words` and
+`music` are only for credits an actual source states.
+
+An unknown id in `credits` **throws at load** rather than dropping the name. On
+a site whose whole job is crediting people, a silently missing name is exactly
+the failure worth making loud, and it can only come from a typo in this file.
+
+`genres` and `moods` are required so that adding a song forces a decision:
+an untagged song would be invisible to every filter. The vocabulary lives in
 [`src/data/taxonomy.ts`](src/data/taxonomy.ts); add to it freely.
 
 ### childSafe
 
-`childSafe: true` is an **allowlist**. "Family listening" mode shows only tracks
+`childSafe: true` is an **allowlist**. "Family listening" mode shows only songs
 marked `true`, so an unmarked song is simply absent rather than wrongly vouched
 for. Nothing is ever marked *unsafe*, that would be a claim about a real
 artist's work that this project has no standing to make.
@@ -59,12 +90,13 @@ They answer different questions and you want both.
 
 `verify:tracks` hits YouTube's oEmbed endpoint and prints the real uploader and
 title for each id, so a typo or a taken-down video shows up before anyone taps
-it.
+it. It is also the best source for credits: an official upload usually names
+everyone on the record in its title.
 
 `check:embeds` boots a real IFrame player per id and records what the API
 reports, because an uploader can disable embedding on a perfectly live video and
 oEmbed will still happily describe it. Anything it reports gets
-`unplayable: true` in the data file; such a track still appears in every list,
+`unplayable: true` in the data file; such a song still appears in every list,
 with its thumbnail dimmed and a link out to YouTube, but it cannot be queued and
 the deck will not accept it.
 
@@ -97,7 +129,7 @@ confirm them.
 | [`src/data/copy.ts`](src/data/copy.ts) | Every user-facing string, in both scripts. Also your name, date, Instagram handle and contact email. |
 | [`src/data/heroImages.ts`](src/data/heroImages.ts) | The rotating hero photos with Unsplash attribution. Swap the `path` and photographer; rotation and credits follow. |
 | [`src/data/credits.ts`](src/data/credits.ts) | Playlists, inspiration and tools shown on `/credits`. If something helped and isn't in here, that's a bug. |
-| [`src/data/artists.ts`](src/data/artists.ts) | The roster. |
+| [`src/data/artists.ts`](src/data/artists.ts) | The people, the songs, and who is credited on what. |
 
 ## Routes
 
@@ -126,9 +158,13 @@ running order; reloading gives a different opening. The seed is generated at
 module scope on purpose, because it is read during render and has to be stable
 across every render of the session.
 
-Picking a mood does three things at once: it filters the queue, re-cues the song
-on the deck, and narrows the background photographs to the frames that suit that
-mood. `moodImageIds` in [`src/data/heroImages.ts`](src/data/heroImages.ts) is a
+Picking a mood filters the queue, re-cues the song on the deck, and narrows the
+background photographs to the frames that suit that mood. Whether it also
+*starts* the song depends on where it was picked: on the front page and in
+Ekantha a mood is the only control, so it is the request and it plays. On the
+song list the same component filters a view being read, so it does not, and the
+row or the "play this set" button is the request. That is `browseOnly` on
+`MoodRow` and the `andPlay` argument to `setFilters`. `moodImageIds` in [`src/data/heroImages.ts`](src/data/heroImages.ts) is a
 mapping onto the photos already in that file rather than a fresh search, so
 every frame stays within the supplied set. The order inside each mood is a
 *preference* order: the first id is the frame that mood opens on.
@@ -179,9 +215,27 @@ entering and leaving never interrupts the song. It gets a lighter scrim than the
 rest of the site: it carries almost no text, so the photograph is allowed
 forward, and that is most of what makes the room feel different.
 
-Leaving is offered three ways (visible control, Escape, browser back), because a
-room you cannot obviously get out of is a trap. Entering is offered from the
-nav, the front page and the tape at the foot of the screen.
+On a computer it takes the whole screen, the way a video player does: a quiet
+room with a URL bar, a tab strip and a dock above it is not quiet. Every entry
+point asks for fullscreen *in its own click handler*, because a browser only
+grants it inside a real gesture, and an effect that runs after the route change
+is too late. It is capability-checked and every rejection is swallowed, since
+iOS Safari does not implement fullscreen on elements at all and a browser
+refusing is a normal outcome. `F` toggles it, and leaving the room by any route
+gives the screen back.
+
+Escape in fullscreen belongs to the browser: it gives the screen back and does
+nothing else. Leaving the room as well would make one key do two things and land
+you on the front page when you only wanted your window back. A second press
+leaves. Leaving is otherwise offered three ways (visible control, Escape,
+browser back), because a room you cannot obviously get out of is a trap.
+Entering is offered from the nav, the front page, the tape at the foot of the
+screen, and the open player.
+
+Keystrokes only reach the room while focus is inside our own document, and the
+YouTube iframe takes focus when playback starts. Once it has, Escape goes to
+YouTube and the page never sees it, so the room reclaims focus whenever the
+window blurs into an iframe.
 
 ### Colour contrast
 
@@ -197,9 +251,22 @@ this one looked fine and was not.
 Songs can be reordered and dropped from the queue for the session. The edits are
 an *overlay* on the derived order (`removed` and `manualOrder` in
 `PlayerProvider`), not a replacement for it, so a filter change cannot be
-silently undone by a stale hand-built list, and one action clears them. Changing
-a filter resets both, since carrying removals across would hide songs the reader
-just asked to see.
+silently undone by a stale hand-built list, and one action clears them.
+
+The edits **survive a filter change**. They used to be cleared on the argument
+that a different set of songs deserves a clean queue, which meant dragging a
+queue into shape and then picking a mood threw the arrangement away. The overlay
+shape is what makes keeping them safe: `manualOrder` ranks whatever is present
+and appends the rest, so a song the new mood brings in is never swallowed. The
+cost is that a removed song stays removed even after you pick a mood it belongs
+to, so the list can be quietly shorter than the filter claims; `resetQueue` is
+offered the whole time there is anything to undo.
+
+Under shuffle the hand order is **kept but not applied**, and the reorder
+controls are hidden. Ranking the songs would put them back in that exact
+sequence and leave the shuffle doing nothing. Turn shuffle off and the
+arrangement returns. Removals still apply, which is why the reset control stays
+available there.
 
 Reordering works by dragging the grip handle, and by arrow buttons. The drag is
 bound to the handle rather than the whole row, because the queue lives in a
