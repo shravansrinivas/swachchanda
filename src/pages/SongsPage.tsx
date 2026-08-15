@@ -25,15 +25,15 @@ export function SongsPage() {
   const shown = useMemo(() => {
     const needle = search.trim().toLowerCase()
 
-    // Match either script of either the song or the artist, so someone typing
-    // "ತುಳಸಿ" and someone typing "tulasi" both land on the same row.
+    // Match either script of the song or of *any* credited artist, so someone
+    // typing "ತುಳಸಿ" and someone typing "tulasi" both land on the same row, and
+    // so does someone searching for the singer featured on it.
     const matches = (item: QueueItem) => {
       if (!needle) return true
       const haystack = [
-        item.track.title,
-        item.track.titleKn ?? '',
-        item.artist.name.en,
-        item.artist.name.kn,
+        item.song.title,
+        item.song.titleKn ?? '',
+        ...item.credits.flatMap((credit) => [credit.artist.name.en, credit.artist.name.kn]),
       ]
       return haystack.some((field) => field.toLowerCase().includes(needle))
     }
@@ -90,7 +90,9 @@ export function SongsPage() {
       </div>
 
       <div className="mb-3">
-        <MoodRow onMore={() => setFiltersOpen(true)} label={t.moodsLabel} />
+        {/* browseOnly: here a mood narrows the list you are reading. It is the
+            one screen where picking one must not start a song. */}
+        <MoodRow onMore={() => setFiltersOpen(true)} label={t.moodsLabel} browseOnly />
       </div>
       <FilterSummary onOpen={() => setFiltersOpen(true)} />
       <FilterSheet
@@ -142,7 +144,7 @@ export function SongsPage() {
         <ul className="grain relative overflow-hidden rounded-[3px] border border-dust/15 bg-deck/70 px-4">
           {shown.map((item, i) => (
             <li key={item.key} className="border-b border-dust/12 last:border-b-0">
-              <TrackRow artist={item.artist} track={item.track} index={i} showArtist showTags />
+              <TrackRow item={item} index={i} showArtist showTags />
             </li>
           ))}
         </ul>

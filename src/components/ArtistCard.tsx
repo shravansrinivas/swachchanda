@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Artist } from '../data/artists'
+import { songsBy } from '../data/artists'
 import { useLanguage } from '../lib/language'
 import { Thumbnail } from './Thumbnail'
 import { TrackRow } from './TrackRow'
@@ -13,7 +14,9 @@ const PREVIEW = 2
  */
 export function ArtistCard({ artist, index }: { artist: Artist; index: number }) {
   const { t, kn, lang } = useLanguage()
-  const remaining = artist.tracks.length - PREVIEW
+  // Every song this artist is credited on, not only the ones filed under them.
+  const songs = songsBy(artist.id)
+  const remaining = songs.length - PREVIEW
 
   return (
     <article className="grain relative scroll-mt-32 overflow-hidden rounded-[3px] border border-dust/15 bg-deck/90">
@@ -24,9 +27,9 @@ export function ArtistCard({ artist, index }: { artist: Artist; index: number })
           <span className="stamp pt-1 text-dust/85">{String(index + 1).padStart(2, '0')}</span>
 
           {/* The first song's thumbnail stands in as the artist's cover. */}
-          {artist.tracks[0] && (
+          {songs[0] && (
             <Link to={`/artists/${artist.id}`} className="w-20 shrink-0">
-              <Thumbnail youtubeId={artist.tracks[0].youtubeId} alt={artist.name[lang]} />
+              <Thumbnail youtubeId={songs[0].song.youtubeId} alt={artist.name[lang]} />
             </Link>
           )}
 
@@ -46,14 +49,19 @@ export function ArtistCard({ artist, index }: { artist: Artist; index: number })
           </div>
         </div>
 
-        <p className={`mt-4 text-[0.95rem] leading-relaxed text-label/85 ${kn ? 'kn' : ''}`}>
-          {artist.blurb[lang]}
-        </p>
+        {/* Not everyone has a write-up. Someone credited on one song and
+            nothing else usually has nothing sourced to say about them, and an
+            invented sentence would be worse than the name on its own. */}
+        {artist.blurb && (
+          <p className={`mt-4 text-[0.95rem] leading-relaxed text-label/85 ${kn ? 'kn' : ''}`}>
+            {artist.blurb[lang]}
+          </p>
+        )}
 
         <ul className="mt-5">
-          {artist.tracks.slice(0, PREVIEW).map((track, i) => (
-            <li key={track.youtubeId} className="border-b border-dust/12 last:border-b-0">
-              <TrackRow artist={artist} track={track} index={i} />
+          {songs.slice(0, PREVIEW).map((item, i) => (
+            <li key={item.key} className="border-b border-dust/12 last:border-b-0">
+              <TrackRow item={item} index={i} />
             </li>
           ))}
         </ul>
@@ -63,8 +71,8 @@ export function ArtistCard({ artist, index }: { artist: Artist; index: number })
           className={`mt-4 inline-block font-mono text-xs text-verdigris underline decoration-verdigris/40 underline-offset-[3px] transition-colors hover:text-dial`}
         >
           {remaining > 0
-            ? `+${remaining} · ${t.artistTrackCount(artist.tracks.length)} →`
-            : `${t.artistTrackCount(artist.tracks.length)} →`}
+            ? `+${remaining} · ${t.artistTrackCount(songs.length)} →`
+            : `${t.artistTrackCount(songs.length)} →`}
         </Link>
       </div>
     </article>

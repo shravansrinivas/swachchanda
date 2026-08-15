@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { trackTitle } from '../data/artists'
+import { songTitle } from '../data/artists'
 import { useLanguage } from '../lib/language'
 import { usePlayer } from '../lib/player'
 import { BiText } from './Bilingual'
@@ -20,6 +20,12 @@ import { BiText } from './Bilingual'
  * in a scrolling column inside a scrolling sheet, and a whole-row drag would
  * fight both. The arrow buttons remain because drag is unusable from a keyboard
  * and awkward with assistive tech.
+ *
+ * None of that is offered while shuffle is on. The shuffle picks the order, so
+ * an arrangement made by hand would either be ignored or, worse, applied and
+ * leave the shuffle doing nothing. Under shuffle this is a list of what is in
+ * the tape, and it says so. Anything arranged earlier is kept, not thrown away:
+ * turn shuffle off and it comes back.
  */
 export function QueueList() {
   const { t, kn } = useLanguage()
@@ -33,6 +39,7 @@ export function QueueList() {
     reorderQueue,
     resetQueue,
     queueEdited,
+    shuffleOn,
   } = usePlayer()
 
   const listRef = useRef<HTMLUListElement>(null)
@@ -116,6 +123,8 @@ export function QueueList() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
         <p className={`stamp text-dust/80 ${kn ? 'kn tracking-normal' : ''}`}>{t.queueHeading}</p>
+        {/* Offered under shuffle too: removals still apply there, so there is
+            still something to undo. */}
         {queueEdited && (
           <button
             type="button"
@@ -126,6 +135,12 @@ export function QueueList() {
           </button>
         )}
       </div>
+
+      {shuffleOn && (
+        <p className={`mb-2 shrink-0 text-[11px] leading-snug text-dust/80 ${kn ? 'kn' : ''}`}>
+          {t.queueShuffled}
+        </p>
+      )}
 
       <ul ref={listRef} className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
         {rows.map((item, i) => {
@@ -148,30 +163,34 @@ export function QueueList() {
                 className={`w-[3px] shrink-0 ${active ? 'bg-dial' : 'bg-dust/25'}`}
               />
 
-              {/* Grip. Owns the drag so the list can still be scrolled. */}
-              <span
-                onPointerDown={onHandleDown(item.key)}
-                role="button"
-                tabIndex={-1}
-                aria-label={t.queueDrag}
-                title={t.queueDrag}
-                className="flex w-5 shrink-0 cursor-grab touch-none items-center justify-center text-dust/60 transition-colors hover:text-dial active:cursor-grabbing"
-              >
-                <svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true">
-                  {[2, 7, 12].map((y) => (
-                    <g key={y}>
-                      <circle cx="2.5" cy={y} r="1.1" fill="currentColor" />
-                      <circle cx="7.5" cy={y} r="1.1" fill="currentColor" />
-                    </g>
-                  ))}
-                </svg>
-              </span>
+              {/* Grip. Owns the drag so the list can still be scrolled. Gone
+                  under shuffle: a handle that grabs and then springs back is a
+                  worse answer than no handle. */}
+              {!shuffleOn && (
+                <span
+                  onPointerDown={onHandleDown(item.key)}
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={t.queueDrag}
+                  title={t.queueDrag}
+                  className="flex w-5 shrink-0 cursor-grab touch-none items-center justify-center text-dust/60 transition-colors hover:text-dial active:cursor-grabbing"
+                >
+                  <svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true">
+                    {[2, 7, 12].map((y) => (
+                      <g key={y}>
+                        <circle cx="2.5" cy={y} r="1.1" fill="currentColor" />
+                        <circle cx="7.5" cy={y} r="1.1" fill="currentColor" />
+                      </g>
+                    ))}
+                  </svg>
+                </span>
+              )}
 
               <button
                 type="button"
-                onClick={() => play(item.artist, item.track)}
+                onClick={() => play(item)}
                 aria-current={active || undefined}
-                disabled={item.track.unplayable}
+                disabled={item.song.unplayable}
                 className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-1 text-left disabled:opacity-40"
               >
                 <span className="stamp w-4 shrink-0 text-dust/75">
@@ -180,12 +199,12 @@ export function QueueList() {
 
                 <span className="min-w-0 flex-1 rounded-[2px] bg-label/90 px-2 py-1">
                   <BiText
-                    value={trackTitle(item.track)}
+                    value={songTitle(item.song)}
                     className="hand text-[1rem] font-bold"
                     secondaryClassName="text-tape/70"
                   />
                   <BiText
-                    value={item.artist.name}
+                    value={item.billing}
                     className="hand text-[0.78rem]"
                     secondaryClassName="text-tape/65"
                   />
@@ -204,20 +223,26 @@ export function QueueList() {
               </button>
 
               <span className="flex shrink-0 flex-col justify-center gap-px pr-1">
-                <QueueAction
-                  label={t.queueUp}
-                  onClick={() => moveInQueue(item.key, -1)}
-                  disabled={i === 0}
-                >
-                  <path d="M6 15l6-6 6 6" />
-                </QueueAction>
-                <QueueAction
-                  label={t.queueDown}
-                  onClick={() => moveInQueue(item.key, 1)}
-                  disabled={i === rows.length - 1}
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </QueueAction>
+                {!shuffleOn && (
+                  <>
+                    <QueueAction
+                      label={t.queueUp}
+                      onClick={() => moveInQueue(item.key, -1)}
+                      disabled={i === 0}
+                    >
+                      <path d="M6 15l6-6 6 6" />
+                    </QueueAction>
+                    <QueueAction
+                      label={t.queueDown}
+                      onClick={() => moveInQueue(item.key, 1)}
+                      disabled={i === rows.length - 1}
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </QueueAction>
+                  </>
+                )}
+                {/* Dropping a song is not a question of sequence, so it stays
+                    even when the order is out of the reader's hands. */}
                 <QueueAction label={t.queueRemove} onClick={() => removeFromQueue(item.key)}>
                   <path d="M6 6l12 12M18 6L6 18" />
                 </QueueAction>

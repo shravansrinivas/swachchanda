@@ -1,6 +1,13 @@
 /**
- * The whole roster lives here. To add an artist or a song, edit this file;
- * nothing in src/components needs to change.
+ * The whole roster lives here: the people, the songs, and who is credited on
+ * what. To add either, edit this file; nothing in src/components changes.
+ *
+ * Songs are NOT nested under an artist. A song names its own credits, in
+ * billing order, and an artist's page is a query over that. Filing each song
+ * under exactly one artist was the old shape and it quietly lied: half of these
+ * are collaborations, and the second, third and fourth names on them were
+ * simply not on the site. A song with four credits now shows four names, and
+ * appears on four artist pages.
  *
  * Every `youtubeId` below was checked against YouTube's oEmbed endpoint and
  * resolves to a real video. Re-check after editing with:
@@ -12,7 +19,7 @@
  * a player error, and the deck falls back to an "open on YouTube" link when
  * they do, so a bad id degrades rather than breaking the page.
  *
- * Prefer official artist/label channels over fan re-uploads: re-uploads get
+ * Prefer official artist and label channels over fan re-uploads: re-uploads get
  * taken down, and this site's whole premise is crediting artists properly.
  *
  * SONGS MUST BE IN KANNADA. An artist being from Karnataka is not enough, and
@@ -36,13 +43,37 @@ export interface Bilingual {
   en: string
 }
 
-export interface Track {
-  /** Romanised title, used as the stable key and shown in English mode. */
+/**
+ * How someone is credited on a song.
+ *
+ * Deliberately shallow. `with` claims only that the official release credits
+ * them, without inventing a role we do not know, which is the honest answer for
+ * most of these: a title reading "A | B" does not say who sang and who played.
+ * `words` and `music` are used only where a source actually says so.
+ */
+export type CreditRole = 'lead' | 'with' | 'featured' | 'words' | 'music'
+
+export interface SongCredit {
+  /** An id in `artists` below. Checked at load, an unknown id throws. */
+  artist: string
+  /** Defaults to 'lead'. */
+  role?: CreditRole
+}
+
+export interface Song {
+  /** Stable slug. The queue key, so it must not change once published. */
+  id: string
+  /** Romanised title, shown in English mode. */
   title: string
   /** Kannada title. Falls back to `title` when absent. */
   titleKn?: string
   /** 11-character YouTube video id. Required, this is what actually plays. */
   youtubeId: string
+  /**
+   * Everyone credited, in billing order, taken from the official release.
+   * The first entry is who the song is filed under.
+   */
+  credits: SongCredit[]
   /** What the song is. At least one; drives the genre filter. */
   genres: Genre[]
   /** What the song is for. At least one; drives the mood filter. */
@@ -60,8 +91,8 @@ export interface Track {
   childSafe?: boolean
   /**
    * Set when YouTube refuses to embed the video (error 101/150) or it is
-   * geo-blocked. Such a track is still listed, because it is still part of the
-   * roster and the artist still deserves the credit, but it cannot be queued
+   * geo-blocked. Such a song is still listed, because it is still part of the
+   * roster and the artists still deserve the credit, but it cannot be queued
    * and the deck will not accept it.
    *
    * Populate with `pnpm check:embeds`, which loads each id in a real player
@@ -77,8 +108,12 @@ export interface Artist {
   /** Stable slug. Used for React keys and the route. */
   id: string
   name: Bilingual
-  blurb: Bilingual
-  tracks: Track[]
+  /**
+   * Optional on purpose. Plenty of people here are credited on someone else's
+   * record and nothing is known about them beyond the name. A name with no
+   * write-up is an honest entry; an invented write-up is not.
+   */
+  blurb?: Bilingual
   /**
    * Secondary outbound links. Anything omitted is generated as a *search* URL
    * on that platform by `platformLinks()` rather than guessed. A search link
@@ -105,34 +140,10 @@ export const artists: Artist[] = [
       kn: 'ಸ್ವರಾತ್ಮದ ದನಿ. ಒಬ್ಬರೇ ಹಾಡಿದಾಗ ಆ ದನಿ ಇನ್ನೂ ಹತ್ತಿರ, ಇನ್ನೂ ಒರಟು. ಜಾನಪದ, ವಚನ, ಇವತ್ತಿನ ಕವಿತೆ, ಎಲ್ಲವನ್ನೂ ಒಂದೇ ಉಸಿರಲ್ಲಿ ಹಿಡಿದಿಡ್ತಾರೆ.',
       en: 'The voice of Swarathma, closer and rougher when they sing alone. Folk, vachana and modern Kannada poetry, all held in the same breath.',
     },
-    tracks: [
-      {
-        title: 'Nadiyolage',
-        titleKn: 'ನದಿಯೊಳಗೆ',
-        youtubeId: '6WuoRV66ti8',
-        genres: ['folk'],
-        moods: ['latenight', 'longing', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Yellaaru Maaduvdu',
-        titleKn: 'ಎಲ್ಲಾರು ಮಾಡುವುದು',
-        youtubeId: 'rge-N2izCr4',
-        genres: ['devotional', 'folk'],
-        moods: ['latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Neelamegha',
-        titleKn: 'ನೀಲಮೇಘ',
-        youtubeId: 'GlVj43_S1mw',
-        genres: ['folk'],
-        moods: ['longing', 'rain', 'focus'],
-        childSafe: true,
-      },
-    ],
     links: {
-      wikipedia: 'https://en.wikipedia.org/wiki/Vasu_Dixit', youtube: 'https://www.youtube.com/@VasuDixit' },
+      wikipedia: 'https://en.wikipedia.org/wiki/Vasu_Dixit',
+      youtube: 'https://www.youtube.com/@VasuDixit',
+    },
   },
   {
     id: 'sangeetha-rajeev',
@@ -141,24 +152,6 @@ export const artists: Artist[] = [
       kn: 'ಉತ್ತರ ಕರ್ನಾಟಕದ ಜಾನಪದವನ್ನು ಎತ್ತಿಕೊಂಡು ತಮ್ಮದೇ ದನಿಯಲ್ಲಿ ಹಾಡಿದವರು. ಕನ್ನಡದ ಸ್ವತಂತ್ರ ಸಂಗೀತವನ್ನು ತಮ್ಮ ಹೆಸರಿನ ಮೇಲೇ ಹೊತ್ತ ಮೊದಲ ಹೆಣ್ಣುಮಕ್ಕಳಲ್ಲಿ ಒಬ್ಬರು.',
       en: 'They picked up Uttara Karnataka folk and sang it in their own voice, and were among the first women to carry Kannada independent music under their own name.',
     },
-    tracks: [
-      {
-        title: 'Nee Hinga Nodabyada',
-        titleKn: 'ನೀ ಹಿಂಗ ನೋಡಬ್ಯಾಡ',
-        youtubeId: '3zB7KJmtecw',
-        genres: ['folk'],
-        moods: ['longing', 'joy'],
-        childSafe: true,
-      },
-      {
-        title: 'Nee Hinga Nodabyada 2.0',
-        titleKn: 'ನೀ ಹಿಂಗ ನೋಡಬ್ಯಾಡ ೨.೦',
-        youtubeId: 'W1HQJnn3rFo',
-        genres: ['folk', 'electronic'],
-        moods: ['joy'],
-        childSafe: true,
-      },
-    ],
     links: {
       wikipedia: 'https://en.wikipedia.org/wiki/Sangeetha_Rajeev',
       youtube: 'https://www.youtube.com/channel/UCJM6XoRMoBgBY4yLSR36Gng',
@@ -172,26 +165,10 @@ export const artists: Artist[] = [
       kn: 'ಶಿಶುನಾಳ ಶರೀಫರ ಪದಗಳನ್ನು ಸಮುದ್ರ ದಾಟಿಸಿ ವೇದಿಕೆಗೆ ಒಯ್ದವರು. ಭಾರತದ ಸ್ವತಂತ್ರ ಸಂಗೀತ ಹೀಗೂ ಇರಬಹುದು ಅಂತ ಒಂದು ಇಡೀ ತಲೆಮಾರಿಗೆ ತೋರಿಸಿಕೊಟ್ಟವರು.',
       en: 'The artist who carried Shishunala Sharifa’s words to festival stages abroad, and showed a whole generation what Indian independent music could look like.',
     },
-    tracks: [
-      {
-        title: 'Kodagana Koli Nungitha',
-        titleKn: 'ಕೊಡಗನ ಕೋಳಿ ನುಂಗಿತ್ತ',
-        youtubeId: 'Af55JPHuRjs',
-        genres: ['devotional', 'folk'],
-        moods: ['latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Parasiva',
-        titleKn: 'ಪರಶಿವ',
-        youtubeId: '63PTx_1WEq4',
-        genres: ['devotional', 'folk'],
-        moods: ['latenight', 'focus'],
-        childSafe: true,
-      },
-    ],
     links: {
-      wikipedia: 'https://en.wikipedia.org/wiki/Raghu_Dixit', youtube: 'https://www.youtube.com/c/RaghuDixitMusic' },
+      wikipedia: 'https://en.wikipedia.org/wiki/Raghu_Dixit',
+      youtube: 'https://www.youtube.com/c/RaghuDixitMusic',
+    },
   },
   {
     id: 'swarathma',
@@ -200,23 +177,6 @@ export const artists: Artist[] = [
       kn: 'ಬೆಂಗಳೂರಿನ ಜಾನಪದ-ರಾಕ್ ಬ್ಯಾಂಡ್. ವೇಷ, ವ್ಯಂಗ್ಯ, ರಾಜಕಾರಣ, ಎಲ್ಲವನ್ನೂ ಒಂದೇ ವೇದಿಕೆಗೆ ಜೋರಾಗಿ ಹೊತ್ತು ತರ್ತಾರೆ.',
       en: 'Bengaluru’s folk-rock band. Costume, satire and politics, all carried onto the same stage and carried loudly.',
     },
-    tracks: [
-      {
-        title: 'Jangama',
-        titleKn: 'ಜಂಗಮ',
-        youtubeId: 'ZeNR1ZzvNlQ',
-        genres: ['folk', 'rock'],
-        moods: ['restless'],
-        childSafe: true,
-      },
-      {
-        title: 'Belongaluru',
-        titleKn: 'ಬೆಲಾಂಗ್ಳೂರು',
-        youtubeId: 'ZvX3pLloaps',
-        genres: ['rock'],
-        moods: ['restless', 'road'],
-      },
-    ],
     links: {
       wikipedia: 'https://en.wikipedia.org/wiki/Swarathma',
       youtube: 'https://www.youtube.com/user/swarathma',
@@ -230,29 +190,6 @@ export const artists: Artist[] = [
       kn: 'ಅಲೋಕ್ ಆರ್. ಬಾಬು. ಬೆಂಗಳೂರಿನ ಬೀದಿ ಕನ್ನಡವನ್ನು ರ‍್ಯಾಪಿಗೆ ತಂದು, ಕನ್ನಡ ಹಿಪ್-ಹಾಪ್ ಅನ್ನು ಮನೆಮಾತು ಮಾಡಿದವರು.',
       en: 'Alok R. Babu. They took the street Kannada of Bengaluru into rap and made Kannada hip-hop a household sound.',
     },
-    tracks: [
-      {
-        title: "Don't Worry",
-        titleKn: 'ಡೋಂಟ್ ವರಿ',
-        youtubeId: 'ksANu45I16U',
-        genres: ['hiphop'],
-        moods: ['joy'],
-      },
-      {
-        title: 'Yaakinge',
-        titleKn: 'ಯಾಕಿಂಗೆ',
-        youtubeId: 'Asts0TK82s8',
-        genres: ['hiphop'],
-        moods: ['longing'],
-      },
-      {
-        title: 'Nan Kannadiga',
-        titleKn: 'ನಾನ್ ಕನ್ನಡಿಗ',
-        youtubeId: 'Sl_JnlsZIVs',
-        genres: ['hiphop'],
-        moods: ['restless', 'joy'],
-      },
-    ],
     links: {
       wikipedia: 'https://en.wikipedia.org/wiki/All_Ok',
       youtube: 'https://www.youtube.com/user/vasusolaris',
@@ -266,30 +203,9 @@ export const artists: Artist[] = [
       kn: 'ಕನ್ನಡ ರ‍್ಯಾಪಿನ ಅತಿ ಹರಿತವಾದ ನಾಲಿಗೆ. ಪದಗಳು ವೇಗವಾಗಿ ಬೀಳ್ತವೆ, ಆದರೆ ಒಂದೂ ವ್ಯರ್ಥ ಆಗಲ್ಲ.',
       en: 'The sharpest tongue in Kannada rap. The words come down fast, and not one of them is wasted.',
     },
-    tracks: [
-      {
-        title: 'Thaderahita',
-        titleKn: 'ತಡೆರಹಿತ',
-        youtubeId: 'EXHmUGAzUMc',
-        genres: ['hiphop'],
-        moods: ['restless'],
-      },
-      {
-        title: 'Ivathilla Naale',
-        titleKn: 'ಇವತ್ತಿಲ್ಲ ನಾಳೆ',
-        youtubeId: 'JFoWHiIzR98',
-        genres: ['hiphop'],
-        moods: ['restless'],
-      },
-      {
-        title: 'Kaage',
-        titleKn: 'ಕಾಗೆ',
-        youtubeId: 'bDkN8k-DWwA',
-        genres: ['hiphop'],
-        moods: ['restless', 'latenight'],
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@MCBIJJUU' },
+    links: {
+      youtube: 'https://www.youtube.com/@MCBIJJUU',
+    },
   },
   {
     id: 'rahul-dit-o',
@@ -298,16 +214,9 @@ export const artists: Artist[] = [
       kn: 'ಬೆಂಗಳೂರಿನ ಹಿಪ್-ಹಾಪ್ ವಲಯವನ್ನು ಕಟ್ಟಿದವರಲ್ಲಿ ಒಬ್ಬರು. ಜೊತೆಗೂಡಿ ಮಾಡುವುದೇ ಇವರ ದಾರಿ, ಇವರ ಒಳ್ಳೆಯ ಹಾಡುಗಳ ಮೇಲೆ ಯಾವಾಗಲೂ ಮೂರು ಹೆಸರಿರುತ್ತವೆ.',
       en: 'One of the builders of the Bengaluru hip-hop scene. Collaboration is the whole method: their best tracks have three names on them.',
     },
-    tracks: [
-      {
-        title: 'LIT',
-        titleKn: 'ಲಿಟ್',
-        youtubeId: 'xlCsTl8YNnA',
-        genres: ['hiphop'],
-        moods: ['restless', 'joy'],
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@RahulDitO' },
+    links: {
+      youtube: 'https://www.youtube.com/@RahulDitO',
+    },
   },
   {
     id: 'lagori',
@@ -316,23 +225,9 @@ export const artists: Artist[] = [
       kn: 'ಬೀದಿ ಆಟದ ಹೆಸರನ್ನೇ ಇಟ್ಟುಕೊಂಡ ಬ್ಯಾಂಡ್. ಕನ್ನಡ, ಹಿಂದಿ, ಇಂಗ್ಲಿಷ್, ಹಾಡು ಯಾವ ಭಾಷೆಗೆ ಬಿದ್ದರೂ ಅದೇ ಚಡಪಡಿಕೆ.',
       en: 'Named after the street game. Kannada, Hindi or English: the same restless energy in whichever language the song lands in.',
     },
-    tracks: [
-      {
-        title: 'Swaha',
-        titleKn: 'ಸ್ವಾಹಾ',
-        youtubeId: 'G8Y1Hiyxm2E',
-        genres: ['hiphop', 'rock'],
-        moods: ['restless'],
-      },
-      {
-        title: 'Helkolakondooru',
-        titleKn: 'ಹೇಳ್ಕೊಳಕ್ಕೊಂದೂರು',
-        youtubeId: 'GJE9wfXZ3ww',
-        genres: ['rock'],
-        moods: ['joy'],
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@Lagoriofficial' },
+    links: {
+      youtube: 'https://www.youtube.com/@Lagoriofficial',
+    },
   },
   {
     id: 'sumedh-k',
@@ -341,52 +236,9 @@ export const artists: Artist[] = [
       kn: 'ಬೆಂಗಳೂರಿನ ಹಾಡುಗಾರ-ಬರಹಗಾರ. ಇವತ್ತಿನ ಅಲೆಯ ನಡುವೆ ನಿಂತವರು, ಯಾವ ಕನ್ನಡ ಇಂಡಿ ಪಟ್ಟಿ ತೆರೆದರೂ ಅವರ ಹೆಸರು ಇರುತ್ತೆ, ಅದೂ ಒಂದೇ ಸಲ ಅಲ್ಲ.',
       en: 'A Bengaluru singer-songwriter at the centre of the current wave. Open any Kannada indie playlist and their name is on it, usually more than once.',
     },
-    tracks: [
-      {
-        title: 'Tulasi',
-        titleKn: 'ತುಳಸಿ',
-        youtubeId: 'Y8ZApXcnhy4',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Maaye',
-        titleKn: 'ಮಾಯೆ',
-        youtubeId: 'Yxx-zTuw1xE',
-        genres: ['indiepop'],
-        moods: ['latenight', 'longing', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Saagara',
-        titleKn: 'ಸಾಗರ',
-        youtubeId: 'ZcRGOUJXJQg',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        // "- Topic" is YouTube's auto-generated official channel for a label's
-        // catalogue, not a fan re-upload.
-        title: 'Daaha',
-        titleKn: 'ದಾಹ',
-        youtubeId: 'CirEMx-__no',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        // Uploaded on Mitra Hegde's channel, who sings on it. Still official.
-        title: 'Meghave',
-        titleKn: 'ಮೇಘವೇ',
-        youtubeId: 'e9cAxbdivFw',
-        genres: ['indiepop'],
-        moods: ['rain', 'longing', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@SumedhK' },
+    links: {
+      youtube: 'https://www.youtube.com/@SumedhK',
+    },
   },
   {
     id: 'sanjith-hegde',
@@ -395,41 +247,6 @@ export const artists: Artist[] = [
       kn: 'ಸಿನಿಮಾ ಹಾಡುಗಾರಿಕೆಯಿಂದ ಬೆಳೆದವರು. ಆದರೆ ಅವರದೇ ಹಾಡುಗಳಲ್ಲಿ ದನಿ ಬೇರೆ, ಮೆತ್ತಗೆ, ಕಿವಿಯ ಪಕ್ಕದಲ್ಲೇ ಹಾಡಿದ ಹಾಗೆ.',
       en: 'They came up through playback, but their own songs are a different and quieter instrument: soft, close-miked.',
     },
-    tracks: [
-      {
-        title: 'Kareyole',
-        titleKn: 'ಕರೆಯೊಲೆ',
-        youtubeId: 'HSzJL-GJBHc',
-        genres: ['indiepop'],
-        moods: ['longing', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Nange Allava',
-        titleKn: 'ನಂಗೆ ಅಲ್ಲವಾ',
-        youtubeId: 'RVMnT4nq9NU',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        // Draws on Purandaradasa's "Tarakka Bindige".
-        title: 'Taare Bindigeya',
-        titleKn: 'ತಾರೆ ಬಿಂದಿಗೆಯ',
-        youtubeId: 'HzpOXAHJN1M',
-        genres: ['devotional', 'indiepop'],
-        moods: ['latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Maayavi',
-        titleKn: 'ಮಾಯಾವಿ',
-        youtubeId: 'TMY1g8pAktk',
-        genres: ['indiepop'],
-        moods: ['longing', 'focus'],
-        childSafe: true,
-      },
-    ],
     links: {
       wikipedia: 'https://en.wikipedia.org/wiki/Sanjith_Hegde',
       youtube: 'https://www.youtube.com/@SanjithHegde',
@@ -443,24 +260,9 @@ export const artists: Artist[] = [
       kn: 'ಕನ್ನಡ ಇಂಡಿ-ಪಾಪಿನ ಹೊಸ ಮುಖ. ಪ್ರೇಮದ ಹಾಡುಗಳನ್ನು ಸ್ವಲ್ಪವೂ ನಾಚಿಕೆ ಇಲ್ಲದೆ ಬರೀತಾರೆ.',
       en: 'The new face of Kannada indie-pop, writing love songs without a trace of embarrassment about it.',
     },
-    tracks: [
-      {
-        title: 'Ninna Notavu',
-        titleKn: 'ನಿನ್ನ ನೋಟವು',
-        youtubeId: 'FDCc2beB77I',
-        genres: ['indiepop'],
-        moods: ['longing', 'joy'],
-        childSafe: true,
-      },
-      {
-        title: 'Nasheya Gungale',
-        titleKn: 'ನಶೆಯ ಗುಂಗಲೆ',
-        youtubeId: '9dlbKgxvg_A',
-        genres: ['indiepop'],
-        moods: ['latenight', 'longing'],
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@TanmayGururaj' },
+    links: {
+      youtube: 'https://www.youtube.com/@TanmayGururaj',
+    },
   },
   {
     id: 'curry',
@@ -469,41 +271,9 @@ export const artists: Artist[] = [
       kn: 'ಕನ್ನಡ ಪದಗಳ ಕೆಳಗೆ ಆಫ್ರೋ-ಬೀಟು ಮತ್ತು ಎಲೆಕ್ಟ್ರಾನಿಕ್ ಸದ್ದು. “ಸುಪ್ರಭಾತ” ಇಪಿಯನ್ನು ಒಂದೇ ಕೂರಿಕೆಯಲ್ಲಿ ಕೇಳಬೇಕು.',
       en: 'Afro-beat and electronics under Kannada words. The Suprabhatha EP is meant to be heard in one sitting.',
     },
-    tracks: [
-      {
-        title: 'Seetha Kalyana',
-        titleKn: 'ಸೀತಾ ಕಲ್ಯಾಣ',
-        youtubeId: 'wsGnsRa5wxE',
-        genres: ['electronic', 'indiepop'],
-        moods: ['joy'],
-        childSafe: true,
-      },
-      {
-        title: 'Nannavale',
-        titleKn: 'ನನ್ನವಳೆ',
-        youtubeId: 'egbFaBl8Of4',
-        genres: ['electronic'],
-        moods: ['joy'],
-        childSafe: true,
-      },
-      {
-        title: 'Manase',
-        titleKn: 'ಮನಸೆ',
-        youtubeId: 'yQOjJLdzJqY',
-        genres: ['electronic'],
-        moods: ['latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Saanjh',
-        titleKn: 'ಸಾಂಜ್',
-        youtubeId: 'pG3MZ3HDBN0',
-        genres: ['electronic', 'indiepop'],
-        moods: ['latenight', 'longing', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@curry.music' },
+    links: {
+      youtube: 'https://www.youtube.com/@curry.music',
+    },
   },
   {
     id: 'narayan-sharma',
@@ -512,33 +282,9 @@ export const artists: Artist[] = [
       kn: 'ಉತ್ತರ ಕನ್ನಡವನ್ನು ಜೊತೆಗೇ ಹೊತ್ತು ತಿರುಗುವ ಹಾಡುಗಳು. ಸಂಗೀತ ಸರಳ, ಆದರೆ ಸಾಲುಗಳು ಮನಸ್ಸಲ್ಲಿ ಉಳಿಯುತ್ತವೆ.',
       en: 'Songs that carry Uttara Kannada around with them. Plain arrangements, lines that stay.',
     },
-    tracks: [
-      {
-        title: 'Bhasavagide',
-        titleKn: 'ಭಾಸವಾಗಿದೆ',
-        youtubeId: 'J8IQ40P9e08',
-        genres: ['indiepop', 'folk'],
-        moods: ['longing', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Baanancha Daati',
-        titleKn: 'ಬಾನಂಚ ದಾಟಿ',
-        youtubeId: '3YbVZ5f4Gj0',
-        genres: ['indiepop'],
-        moods: ['road', 'longing'],
-        childSafe: true,
-      },
-      {
-        title: 'Uttara Kannada',
-        titleKn: 'ಉತ್ತರ ಕನ್ನಡ',
-        youtubeId: 'BJ-gIBC4w5g',
-        genres: ['folk'],
-        moods: ['road', 'rain', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/channel/UCvOmVgVsgiIxZwtOd28JIKA' },
+    links: {
+      youtube: 'https://www.youtube.com/channel/UCvOmVgVsgiIxZwtOd28JIKA',
+    },
   },
   {
     id: 'pineapple-express',
@@ -547,16 +293,9 @@ export const artists: Artist[] = [
       kn: 'ಬೆಂಗಳೂರಿನ ಪ್ರೊಗ್-ಫ್ಯೂಷನ್ ಬ್ಯಾಂಡ್. ಕರ್ನಾಟಕ ಸಂಗೀತ, ಹಿಂದೂಸ್ತಾನಿ, ಮೆಟಲ್, ಎಲ್ಲವನ್ನೂ ಒಂದೇ ಹಾಡಿನಲ್ಲಿ ಹಿಡಿಸ್ತಾರೆ. ಸಾಲುಗಳು ಕನ್ನಡದಿಂದ ಇಂಗ್ಲಿಷಿಗೆ ಸಲೀಸಾಗಿ ಹೊರಳ್ತವೆ.',
       en: 'A Bengaluru prog-fusion band that will put Carnatic, Hindustani and metal inside the same song and make it hold together, switching between Kannada and English as the line needs it.',
     },
-    tracks: [
-      {
-        title: 'Fineapple',
-        titleKn: 'ಫೈನಾಪಲ್',
-        youtubeId: 'ol6mmFtZbJY',
-        genres: ['fusion'],
-        moods: ['joy', 'restless'],
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@PineappleExpressMusic' },
+    links: {
+      youtube: 'https://www.youtube.com/@PineappleExpressMusic',
+    },
   },
   {
     id: 'vasuki-vaibhav',
@@ -565,18 +304,10 @@ export const artists: Artist[] = [
       kn: 'ಸಂಯೋಜಕರು, ಗಾಯಕರು, ಬರಹಗಾರರು. ಸಿನಿಮಾ ಕೆಲಸ ಮತ್ತು ತಮ್ಮದೇ ಹಾಡುಗಳ ನಡುವೆ ದನಿ ಬದಲಾಯಿಸದೆ ಓಡಾಡ್ತಾರೆ.',
       en: 'Composer, singer and lyricist, moving between film work and their own releases without changing register much.',
     },
-    tracks: [
-      {
-        title: 'Gira Gira',
-        titleKn: 'ಗಿರ ಗಿರ',
-        youtubeId: 'y4QPOKGcnuI',
-        genres: ['indiepop'],
-        moods: ['joy'],
-        childSafe: true,
-      },
-    ],
     links: {
-      wikipedia: 'https://en.wikipedia.org/wiki/Vasuki_Vaibhav', youtube: 'https://www.youtube.com/@VasukiVaibhav' },
+      wikipedia: 'https://en.wikipedia.org/wiki/Vasuki_Vaibhav',
+      youtube: 'https://www.youtube.com/@VasukiVaibhav',
+    },
   },
   {
     id: 'mitra-hegde',
@@ -585,25 +316,9 @@ export const artists: Artist[] = [
       kn: 'ಪ್ರೀತಿ, ದುಃಖ, ಬಿಡಲಾಗದ ನೆನಪು: ಇವನ್ನೇ ಹಿಡಿದು ಹಾಡು ಕಟ್ಟುತ್ತಾರೆ. ದನಿಯಲ್ಲಿ ಅವಸರವಿಲ್ಲ.',
       en: 'They build songs out of love, grief and the memories that will not let go. Never a note in a hurry.',
     },
-    tracks: [
-      {
-        title: 'Ninnane',
-        titleKn: 'ನಿನ್ನನೇ',
-        youtubeId: 'Hl-cljNHfCo',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Nanariye',
-        titleKn: 'ನನಗರಿಯೆ',
-        youtubeId: 'OBKYBEeBdic',
-        genres: ['indiepop'],
-        moods: ['longing', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@MitraHegde' },
+    links: {
+      youtube: 'https://www.youtube.com/@MitraHegde',
+    },
   },
   {
     id: 'adhvik',
@@ -612,59 +327,9 @@ export const artists: Artist[] = [
       kn: 'ಕನ್ನಡ ಇಂಡಿಯಲ್ಲಿ ಸತತವಾಗಿ ಹಾಡು ಬಿಡುಗಡೆ ಮಾಡುತ್ತಿರುವವರು. ಅಲೆಮಾರಿತನವೇ ಇವರ ಬಹುತೇಕ ಹಾಡುಗಳ ಜೀವ.',
       en: 'One of the steadiest release schedules in Kannada indie. Restlessness runs through most of what they write.',
     },
-    tracks: [
-      {
-        title: 'Marujanma',
-        titleKn: 'ಮರುಜನ್ಮ',
-        youtubeId: 'FUOOO9LcEzI',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Alemaari',
-        titleKn: 'ಅಲೆಮಾರಿ',
-        youtubeId: '-TXZG0lh8PY',
-        genres: ['indiepop', 'folk'],
-        moods: ['road'],
-        childSafe: true,
-      },
-      {
-        title: 'Ninna Gungalli',
-        titleKn: 'ನಿನ್ನ ಗುಂಗಲ್ಲಿ',
-        youtubeId: 'iLf_yqF9VjA',
-        genres: ['indiepop'],
-        moods: ['longing'],
-        childSafe: true,
-      },
-      {
-        title: 'Stay With Me',
-        titleKn: 'ಸ್ಟೇ ವಿಥ್ ಮಿ',
-        youtubeId: 'iU8QqpBhMaY',
-        genres: ['indiepop'],
-        moods: ['latenight', 'longing'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@TheRealAdhvik' },
-  },
-  {
-    id: 'thanusha-keerthan',
-    name: { kn: 'ತನುಷಾ ಕೆ.ಎಂ. ಮತ್ತು ಕೀರ್ತನ್ ಹೊಳ್ಳ', en: 'Thanusha K M & Keerthan Holla' },
-    blurb: {
-      kn: 'ಎರಡು ದನಿ, ಒಂದೇ ಹಾಡು. ಮೋಹ ಎಂಬ ಪದಕ್ಕೆ ಇವರು ಕೊಟ್ಟ ರೂಪ ಸುಲಭಕ್ಕೆ ಮರೆಯುವಂಥದ್ದಲ್ಲ.',
-      en: 'Two voices on one song. What they made of the word moha is not easy to shake off.',
+    links: {
+      youtube: 'https://www.youtube.com/@TheRealAdhvik',
     },
-    tracks: [
-      {
-        title: 'Moha',
-        titleKn: 'ಮೋಹ',
-        youtubeId: 'dXo1UkRaw3A',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight'],
-        childSafe: true,
-      },
-    ],
   },
   {
     id: 'mysore-xpress',
@@ -673,16 +338,6 @@ export const artists: Artist[] = [
       kn: 'ಮೈಸೂರಿನ ಬ್ಯಾಂಡ್, ಮೈಸೂರಿನ ಬಗ್ಗೆಯೇ ಹಾಡುಗಳು. ಊರಿನ ಹೆಮ್ಮೆಯನ್ನು ಸದ್ದಿಲ್ಲದೆ ಹೊತ್ತವರು.',
       en: 'A Mysuru band singing about Mysuru, carrying the pride of the place without ever shouting about it.',
     },
-    tracks: [
-      {
-        title: 'Nammooru',
-        titleKn: 'ನಮ್ಮೂರು',
-        youtubeId: '5akMHLngXiY',
-        genres: ['rock', 'folk'],
-        moods: ['joy', 'road'],
-        childSafe: true,
-      },
-    ],
     links: {
       youtube: 'https://www.youtube.com/@MysoreXpress',
       instagram: 'https://www.instagram.com/mysore_xpress/',
@@ -695,16 +350,6 @@ export const artists: Artist[] = [
       kn: 'ಸಂಯೋಜನೆ, ಸಾಹಿತ್ಯ, ಹಾಡುಗಾರಿಕೆ: ಮೂರನ್ನೂ ತಾವೇ ಮಾಡುತ್ತಾರೆ. ಕಲಾವಿದರಿಗೂ ಸಂಗೀತಕ್ಕೂ ನಡುವಿನ ಪ್ರೇಮಕಥೆ ಇವರ ಹಾಡು.',
       en: 'Composer, lyricist and singer, all three themselves. Their best-known song is a love story between an artist and music.',
     },
-    tracks: [
-      {
-        title: 'Aahana',
-        titleKn: 'ಆಹಾನ',
-        youtubeId: 'oFyJAYNohAk',
-        genres: ['indiepop'],
-        moods: ['longing', 'joy'],
-        childSafe: true,
-      },
-    ],
   },
   {
     id: 'karthik-chennoji-rao',
@@ -713,17 +358,9 @@ export const artists: Artist[] = [
       kn: 'ಇಂಡಿ ರಾಕ್‌ನಿಂದ ಸಿನಿಮಾದವರೆಗೆ ನಡೆದವರು. ಸೊಲೊ ಹಾಡುಗಳಲ್ಲಿ ದನಿ ಹೆಚ್ಚು ಸರಳ, ಹೆಚ್ಚು ಹತ್ತಿರ.',
       en: 'They came from indie rock into film work. On their own releases the voice is plainer and much closer.',
     },
-    tracks: [
-      {
-        title: 'Chinnada Hoovu',
-        titleKn: 'ಚಿನ್ನದ ಹೂವು',
-        youtubeId: 'P3CvKQTVr8c',
-        genres: ['indiepop', 'folk'],
-        moods: ['joy', 'longing'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@karthikchennojirao' },
+    links: {
+      youtube: 'https://www.youtube.com/@karthikchennojirao',
+    },
   },
   {
     id: 'chirayu',
@@ -732,22 +369,6 @@ export const artists: Artist[] = [
       kn: 'ಕನ್ನಡ ರ‍್ಯಾಪಿನ ಹೊಸ ದನಿಗಳಲ್ಲಿ ಒಬ್ಬರು. ಬರವಣಿಗೆ ವೇಗವಾಗಿದ್ದರೂ ಮಾತು ಸ್ಪಷ್ಟ.',
       en: 'One of the newer voices in Kannada rap. The writing moves fast but never blurs.',
     },
-    tracks: [
-      {
-        title: 'Papi Chirayu',
-        titleKn: 'ಪಾಪಿ ಚಿರಾಯು',
-        youtubeId: 'jxUoMVRAYL4',
-        genres: ['hiphop'],
-        moods: ['restless'],
-      },
-      {
-        title: 'Rap God',
-        titleKn: 'ರ‍್ಯಾಪ್ ಗಾಡ್',
-        youtubeId: '8GYxPhOrHu4',
-        genres: ['hiphop'],
-        moods: ['restless'],
-      },
-    ],
   },
   {
     id: 'varijashree-venugopal',
@@ -756,34 +377,10 @@ export const artists: Artist[] = [
       kn: 'ಕರ್ನಾಟಕ ಸಂಗೀತ, ಜಾಝ್, ಕೊಳಲು, ಮತ್ತು ದನಿಯನ್ನೇ ವಾದ್ಯವಾಗಿಸುವ ಕಲೆ. ಜಗತ್ತಿನ ವೇದಿಕೆಗಳಲ್ಲಿ ಕನ್ನಡವನ್ನು ಹಾಡುತ್ತಿರುವವರು.',
       en: 'Carnatic training, jazz phrasing, flute, and a voice used as an instrument in its own right. They sing Kannada on stages a long way from home.',
     },
-    tracks: [
-      {
-        title: 'Nee',
-        titleKn: 'ನೀ',
-        youtubeId: 'fJoii5IURrk',
-        genres: ['fusion'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Ranjani',
-        titleKn: 'ರಂಜನಿ',
-        youtubeId: 'EPZLl9XycOc',
-        genres: ['fusion'],
-        moods: ['joy', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Harivaa Jhari',
-        titleKn: 'ಹರಿವಾ ಝರಿ',
-        youtubeId: 'g6Q2yMu8C3s',
-        genres: ['fusion'],
-        moods: ['rain', 'latenight', 'focus'],
-        childSafe: true,
-      },
-    ],
     links: {
-      wikipedia: 'https://en.wikipedia.org/wiki/Varijashree_Venugopal', youtube: 'https://www.youtube.com/c/Varijashree' },
+      wikipedia: 'https://en.wikipedia.org/wiki/Varijashree_Venugopal',
+      youtube: 'https://www.youtube.com/c/Varijashree',
+    },
   },
   {
     id: 'kutcheri',
@@ -792,24 +389,6 @@ export const artists: Artist[] = [
       kn: 'ಬೆಂಗಳೂರಿನ ಇಂಡಿ ರಾಕ್ ಬ್ಯಾಂಡ್. ಒಪ್ಪಿಗೆ ಸಿಗದ ಪ್ರೀತಿಯ ಬಗ್ಗೆ ಇವರಷ್ಟು ನೇರವಾಗಿ ಬರೆದವರು ಕಡಿಮೆ.',
       en: 'A Bengaluru indie rock band. Few people write about unreturned love this plainly.',
     },
-    tracks: [
-      {
-        title: 'Preeti Sadhyave?',
-        titleKn: 'ಪ್ರೀತಿ ಸಾಧ್ಯವೇ?',
-        youtubeId: '8Ob9D_PhC_c',
-        genres: ['rock', 'indiepop'],
-        moods: ['longing'],
-        childSafe: true,
-      },
-      {
-        title: 'Endigu',
-        titleKn: 'ಎಂದಿಗೂ',
-        youtubeId: 'KWc04PcvZpk',
-        genres: ['rock'],
-        moods: ['longing', 'restless'],
-        childSafe: true,
-      },
-    ],
   },
   {
     id: 'pranava-karanth',
@@ -818,34 +397,6 @@ export const artists: Artist[] = [
       kn: 'ಸಹನೆ ತೊರೆದ ಮನಸ್ಸಿನ ಹಾಡು. ಸರಳ ಸಾಲುಗಳಲ್ಲಿ ದೊಡ್ಡ ಭಾವ ಇಡುತ್ತಾರೆ.',
       en: 'Songs for a mind that has run out of patience, with big feeling packed into plain lines.',
     },
-    tracks: [
-      {
-        title: 'Sahane Torede',
-        titleKn: 'ಸಹನೆ ತೊರೆದೆ',
-        youtubeId: 'F4NNry7lLsM',
-        genres: ['indiepop'],
-        moods: ['longing', 'restless', 'focus'],
-        childSafe: true,
-      },
-    ],
-  },
-  {
-    id: 'priya-mali-nagarjun-sharma',
-    name: { kn: 'ಪ್ರಿಯಾ ಮಾಲಿ ಮತ್ತು ನಾಗಾರ್ಜುನ್ ಶರ್ಮ', en: 'Priya Mali & Nagarjun Sharma' },
-    blurb: {
-      kn: 'ಸಂಗೀತ ಒಬ್ಬರದು, ಸಾಹಿತ್ಯ ಇನ್ನೊಬ್ಬರದು. ಭೂರಮೆ ಎಂಬ ಹೆಸರೇ ಹಾಡಿನ ಅರ್ಧ ಕೆಲಸ ಮಾಡುತ್ತದೆ.',
-      en: 'Music from one, words from the other. The title Bhoorame does half the work of the song by itself.',
-    },
-    tracks: [
-      {
-        title: 'Bhoorame',
-        titleKn: 'ಭೂರಮೆ',
-        youtubeId: 'jjzE71kE4UQ',
-        genres: ['indiepop'],
-        moods: ['longing', 'joy'],
-        childSafe: true,
-      },
-    ],
   },
   {
     id: 'vishwi',
@@ -854,17 +405,9 @@ export const artists: Artist[] = [
       kn: 'ಬದುಕೇ ಒಂದು ಸವಾರಿ ಎಂಬ ಹಾಡು. ಹಿತ್ತಾಳೆ ವಾದ್ಯಗಳ ಸದ್ದು ಕನ್ನಡ ಇಂಡಿಯಲ್ಲಿ ಅಪರೂಪ.',
       en: 'A song about life as one long ride. Brass this bright is rare in Kannada indie.',
     },
-    tracks: [
-      {
-        title: 'Nanna Savaari',
-        titleKn: 'ನನ್ನ ಸವಾರಿ',
-        youtubeId: 'tjd_9l5iAhQ',
-        genres: ['indiepop', 'fusion'],
-        moods: ['road', 'joy'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@vishwi' },
+    links: {
+      youtube: 'https://www.youtube.com/@vishwi',
+    },
   },
   {
     id: 'tarana',
@@ -873,17 +416,9 @@ export const artists: Artist[] = [
       kn: 'ಕಳೆದುಹೋದ ದಿನಗಳ ಬಗ್ಗೆ ಬರೆದ ಹಾಡು. ಸದ್ದು ಕಡಿಮೆ, ಉಳಿಯುವುದು ಹೆಚ್ಚು.',
       en: 'A song about days that have already gone. Quiet on the surface, and it stays.',
     },
-    tracks: [
-      {
-        title: 'Kaledhode',
-        titleKn: 'ಕಳೆದೋದೆ',
-        youtubeId: 'qTSjEnYYfT0',
-        genres: ['indiepop'],
-        moods: ['longing', 'latenight', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@taranaofficiall' },
+    links: {
+      youtube: 'https://www.youtube.com/@taranaofficiall',
+    },
   },
   {
     id: 'suraj-km',
@@ -892,54 +427,886 @@ export const artists: Artist[] = [
       kn: 'ಸ್ವಂತ ಚಾನೆಲ್ಲಿನಲ್ಲೇ ಒಂದೊಂದಾಗಿ ಹಾಡು ಹಾಕುತ್ತ ಬೆಳೆದವರು. ಯಾವ ಲೇಬಲ್ಲಿನ ಹಂಗೂ ಇಲ್ಲ.',
       en: 'They built it up one upload at a time on their own channel, without a label anywhere in sight.',
     },
-    tracks: [
-      {
-        title: 'Rockstar',
-        titleKn: 'ರಾಕ್‌ಸ್ಟಾರ್',
-        youtubeId: 'kAEDS_cYwzY',
-        genres: ['rock', 'indiepop'],
-        moods: ['restless', 'joy'],
-      },
-      {
-        title: 'Horaadu Nee',
-        titleKn: 'ಹೋರಾಡು ನೀ',
-        youtubeId: 'HUiCpPfUXvI',
-        genres: ['indiepop', 'rock'],
-        moods: ['restless'],
-        childSafe: true,
-      },
-      {
-        title: 'Kaadige',
-        titleKn: 'ಕಾಡಿಗೆ',
-        youtubeId: 'Jz7nqW692w8',
-        genres: ['indiepop'],
-        moods: ['longing', 'focus'],
-        childSafe: true,
-      },
-      {
-        title: 'Sanchaari',
-        titleKn: 'ಸಂಚಾರಿ',
-        youtubeId: 'qr1nVeFK_3k',
-        genres: ['indiepop'],
-        moods: ['road'],
-        childSafe: true,
-      },
-      {
-        title: 'Thaare',
-        titleKn: 'ತಾರೆ',
-        youtubeId: '4kKmTaEjl4Y',
-        genres: ['indiepop'],
-        moods: ['latenight', 'longing', 'focus'],
-        childSafe: true,
-      },
-    ],
-    links: { youtube: 'https://www.youtube.com/@suraj_km' },
+    links: {
+      youtube: 'https://www.youtube.com/@suraj_km',
+    },
+  },
+  {
+    id: 'mamta-sagar',
+    name: { kn: 'ಮಮತಾ ಸಾಗರ್', en: 'Mamta Sagar' },
+    blurb: {
+      kn: 'ಕನ್ನಡದ ಕವಿ ಮತ್ತು ನಾಟಕಕಾರರು. ನದಿಯೊಳಗೆ ಹಾಡು ಇವರ ಸಾಲುಗಳ ಮೇಲೆ ನಿಂತಿದೆ.',
+      en: 'A Kannada poet and playwright. Nadiyolage is built on their lines.',
+    },
+  },
+  {
+    id: 'kanakadasa',
+    name: { kn: 'ಕನಕದಾಸರು', en: 'Kanakadasa' },
+    blurb: {
+      kn: '೧೬ನೇ ಶತಮಾನದ ಹರಿದಾಸರು. ಇವರ ಕೀರ್ತನೆಗಳು ಈಗಲೂ ಹೊಸ ಧ್ವನಿಗಳಲ್ಲಿ ಹಾಡಲ್ಪಡ್ತಿವೆ.',
+      en: 'The 16th century Haridasa poet, still being sung in new voices four hundred years on.',
+    },
+  },
+  {
+    id: 'shishunala-sharifa',
+    name: { kn: 'ಶಿಶುನಾಳ ಶರೀಫರು', en: 'Shishunala Sharifa' },
+    blurb: {
+      kn: '೧೯ನೇ ಶತಮಾನದ ಸಂತ ಕವಿ. ಸರಳ ಸಾಲುಗಳಲ್ಲಿ ದೊಡ್ಡ ಪ್ರಶ್ನೆಗಳನ್ನು ಇಟ್ಟವರು.',
+      en: 'The 19th century saint-poet who put the largest questions into the plainest lines.',
+    },
+  },
+  {
+    id: 'kiran-kipo',
+    name: { kn: 'ಕಿರಣ್ ಕಿಪೊ', en: 'Kiran kiPo' },
+  },
+  {
+    id: 's-i-d',
+    name: { kn: 'ಎಸ್.ಐ.ಡಿ.', en: 'S.I.D' },
+  },
+  {
+    id: 'chiranthana-am',
+    name: { kn: 'ಚಿರಂತನ ಎ.ಎಂ.', en: 'Chiranthana AM' },
+  },
+  {
+    id: 'sumant-shridhar',
+    name: { kn: 'ಸುಮಂತ್ ಶ್ರೀಧರ್', en: 'Sumant Shridhar' },
+  },
+  {
+    id: 'aditi-prahalad',
+    name: { kn: 'ಅದಿತಿ ಪ್ರಹ್ಲಾದ್', en: 'Aditi Prahalad' },
+  },
+  {
+    id: 'ashwin-mandoth',
+    name: { kn: 'ಅಶ್ವಿನ್ ಮಂಡೋತ್', en: 'Ashwin Mandoth' },
+  },
+  {
+    id: 'manish-kodira',
+    name: { kn: 'ಮನೀಶ್ ಕೊಡಿರ', en: 'Manish Kodira' },
+  },
+  {
+    id: 'sanjana-doss',
+    name: { kn: 'ಸಂಜನಾ ಡಾಸ್', en: 'Sanjana Doss' },
+  },
+  {
+    id: 'bijoy-shetty',
+    name: { kn: 'ಬಿಜೊಯ್ ಶೆಟ್ಟಿ', en: 'Bijoy Shetty' },
+  },
+  {
+    id: 'sonu-nigam',
+    name: { kn: 'ಸೋನು ನಿಗಮ್', en: 'Sonu Nigam' },
+    links: { wikipedia: 'https://en.wikipedia.org/wiki/Sonu_Nigam' },
+  },
+  {
+    id: 'nagarjun-sharma',
+    name: { kn: 'ನಾಗಾರ್ಜುನ್ ಶರ್ಮ', en: 'Nagarjun Sharma' },
+  },
+  {
+    id: 'jerusha-christopher',
+    name: { kn: 'ಜೆರುಷಾ ಕ್ರಿಸ್ಟೋಫರ್', en: 'Jerusha Christopher' },
+  },
+  {
+    id: 'mayuri-nataraja',
+    name: { kn: 'ಮಯೂರಿ ನಟರಾಜ', en: 'Mayuri Nataraja' },
+  },
+  {
+    id: 'prakyath-narayan',
+    name: { kn: 'ಪ್ರಖ್ಯಾತ್ ನಾರಾಯಣ್', en: 'Prakyath Narayan' },
+  },
+  {
+    id: 'chinmayee',
+    name: { kn: 'ಚಿನ್ಮಯೀ', en: 'Chinmayee' },
+  },
+  {
+    id: 'avinash-balekkala',
+    name: { kn: 'ಅವಿನಾಶ್ ಬಾಳೆಕ್ಕಳ', en: 'Avinash Balekkala' },
+  },
+  {
+    id: 'priya-mali',
+    name: { kn: 'ಪ್ರಿಯಾ ಮಾಲಿ', en: 'Priya Mali' },
+  },
+  {
+    id: 'harsh',
+    name: { kn: 'ಹರ್ಷ್', en: 'Harsh' },
+  },
+  {
+    id: 'aishwarya-rangarajan',
+    name: { kn: 'ಐಶ್ವರ್ಯಾ ರಂಗರಾಜನ್', en: 'Aishwarya Rangarajan' },
+  },
+  {
+    id: 'thanusha-km',
+    name: { kn: 'ತನುಷಾ ಕೆ.ಎಂ.', en: 'Thanusha K M' },
+  },
+  {
+    id: 'keerthan-holla',
+    name: { kn: 'ಕೀರ್ತನ್ ಹೊಳ್ಳ', en: 'Keerthan Holla' },
+  },
+  {
+    id: 'goutham-hc',
+    name: { kn: 'ಗೌತಮ್ ಎಚ್.ಸಿ.', en: 'Goutham HC' },
+  },
+  {
+    id: 'nidhi-hegde',
+    name: { kn: 'ನಿಧಿ ಹೆಗಡೆ', en: 'Nidhi Hegde' },
+  },
+  {
+    id: 'raghav-bhotika',
+    name: { kn: 'ರಾಘವ್ ಭೋಟಿಕಾ', en: 'Raghav Bhotika' },
+  },
+  {
+    id: 'bela-fleck',
+    name: { kn: 'ಬೇಲಾ ಫ್ಲೆಕ್', en: 'Béla Fleck' },
+    blurb: {
+      kn: 'ಅಮೆರಿಕದ ಬ್ಯಾಂಜೊ ವಾದಕರು. ರಂಜನಿಯಲ್ಲಿ ವರಿಜಾಶ್ರೀ ಜೊತೆ ನುಡಿಸಿದವರು.',
+      en: 'The American banjo player, alongside Varijashree on Ranjani.',
+    },
+    links: { wikipedia: 'https://en.wikipedia.org/wiki/B%C3%A9la_Fleck' },
+  },
+  {
+    id: 'yazin-nizar',
+    name: { kn: 'ಯಾಜಿನ್ ನಿಜಾರ್', en: 'Yazin Nizar' },
+    links: { wikipedia: 'https://en.wikipedia.org/wiki/Yazin_Nizar' },
+  },
+  {
+    id: 'sparsha-rk',
+    name: { kn: 'ಸ್ಪರ್ಶ ಆರ್.ಕೆ.', en: 'Sparsha RK' },
+  },
+  {
+    id: 'kiran-kaverappa',
+    name: { kn: 'ಕಿರಣ್ ಕಾವೇರಪ್ಪ', en: 'Kiran Kaverappa' },
+  },
+  {
+    id: 'phani-kalyan',
+    name: { kn: 'ಫಣಿ ಕಲ್ಯಾಣ್', en: 'Phani Kalyan' },
   },
 ]
 
-/** A track's title in both scripts, for the bilingual display components. */
-export function trackTitle(track: Track): Bilingual {
-  return { en: track.title, kn: track.titleKn ?? track.title }
+/**
+ * Every song, in tape order. `credits[0]` is the billed lead.
+ *
+ * Order here is the running order of the site's default queue, so it is
+ * authored rather than sorted; the song list re-sorts for display.
+ */
+export const songs: Song[] = [
+  {
+    id: 'nadiyolage',
+    title: 'Nadiyolage',
+    titleKn: 'ನದಿಯೊಳಗೆ',
+    youtubeId: '6WuoRV66ti8',
+    credits: [{ artist: 'vasu-dixit' }, { artist: 'mamta-sagar', role: 'words' }],
+    genres: ['folk'],
+    moods: ['latenight', 'longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'yellaaru-maaduvdu',
+    title: 'Yellaaru Maaduvdu',
+    titleKn: 'ಎಲ್ಲಾರು ಮಾಡುವುದು',
+    youtubeId: 'rge-N2izCr4',
+    credits: [{ artist: 'vasu-dixit' }, { artist: 'kanakadasa', role: 'words' }],
+    genres: ['devotional', 'folk'],
+    moods: ['latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'neelamegha',
+    title: 'Neelamegha',
+    titleKn: 'ನೀಲಮೇಘ',
+    youtubeId: 'GlVj43_S1mw',
+    credits: [{ artist: 'vasu-dixit' }],
+    genres: ['folk'],
+    moods: ['longing', 'rain', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'nee-hinga-nodabyada',
+    title: 'Nee Hinga Nodabyada',
+    titleKn: 'ನೀ ಹಿಂಗ ನೋಡಬ್ಯಾಡ',
+    youtubeId: '3zB7KJmtecw',
+    credits: [{ artist: 'sangeetha-rajeev' }],
+    genres: ['folk'],
+    moods: ['longing', 'joy'],
+    childSafe: true,
+  },
+  {
+    id: 'nee-hinga-nodabyada-2-0',
+    title: 'Nee Hinga Nodabyada 2.0',
+    titleKn: 'ನೀ ಹಿಂಗ ನೋಡಬ್ಯಾಡ ೨.೦',
+    youtubeId: 'W1HQJnn3rFo',
+    credits: [{ artist: 'sangeetha-rajeev' }],
+    genres: ['folk', 'electronic'],
+    moods: ['joy'],
+    childSafe: true,
+  },
+  {
+    id: 'kodagana-koli-nungitha',
+    title: 'Kodagana Koli Nungitha',
+    titleKn: 'ಕೊಡಗನ ಕೋಳಿ ನುಂಗಿತ್ತ',
+    youtubeId: 'Af55JPHuRjs',
+    credits: [{ artist: 'raghu-dixit' }, { artist: 'shishunala-sharifa', role: 'words' }],
+    genres: ['devotional', 'folk'],
+    moods: ['latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'parasiva',
+    title: 'Parasiva',
+    titleKn: 'ಪರಶಿವ',
+    youtubeId: '63PTx_1WEq4',
+    credits: [{ artist: 'raghu-dixit' }],
+    genres: ['devotional', 'folk'],
+    moods: ['latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'jangama',
+    title: 'Jangama',
+    titleKn: 'ಜಂಗಮ',
+    youtubeId: 'ZeNR1ZzvNlQ',
+    credits: [{ artist: 'swarathma' }],
+    genres: ['folk', 'rock'],
+    moods: ['restless'],
+    childSafe: true,
+  },
+  {
+    id: 'belongaluru',
+    title: 'Belongaluru',
+    titleKn: 'ಬೆಲಾಂಗ್ಳೂರು',
+    youtubeId: 'ZvX3pLloaps',
+    credits: [{ artist: 'swarathma' }],
+    genres: ['rock'],
+    moods: ['restless', 'road'],
+  },
+  {
+    id: 'dont-worry',
+    title: "Don't Worry",
+    titleKn: 'ಡೋಂಟ್ ವರಿ',
+    youtubeId: 'ksANu45I16U',
+    credits: [{ artist: 'all-ok' }],
+    genres: ['hiphop'],
+    moods: ['joy'],
+  },
+  {
+    id: 'yaakinge',
+    title: 'Yaakinge',
+    titleKn: 'ಯಾಕಿಂಗೆ',
+    youtubeId: 'Asts0TK82s8',
+    credits: [{ artist: 'all-ok' }],
+    genres: ['hiphop'],
+    moods: ['longing'],
+  },
+  {
+    id: 'nan-kannadiga',
+    title: 'Nan Kannadiga',
+    titleKn: 'ನಾನ್ ಕನ್ನಡಿಗ',
+    youtubeId: 'Sl_JnlsZIVs',
+    credits: [
+      { artist: 'all-ok' },
+      { artist: 'rahul-dit-o', role: 'featured' },
+      { artist: 'mc-bijju', role: 'featured' },
+    ],
+    genres: ['hiphop'],
+    moods: ['restless', 'joy'],
+  },
+  {
+    id: 'thaderahita',
+    title: 'Thaderahita',
+    titleKn: 'ತಡೆರಹಿತ',
+    youtubeId: 'EXHmUGAzUMc',
+    credits: [{ artist: 'mc-bijju' }, { artist: 'kiran-kipo', role: 'featured' }],
+    genres: ['hiphop'],
+    moods: ['restless'],
+  },
+  {
+    id: 'ivathilla-naale',
+    title: 'Ivathilla Naale',
+    titleKn: 'ಇವತ್ತಿಲ್ಲ ನಾಳೆ',
+    youtubeId: 'JFoWHiIzR98',
+    credits: [{ artist: 'mc-bijju' }],
+    genres: ['hiphop'],
+    moods: ['restless'],
+  },
+  {
+    id: 'kaage',
+    title: 'Kaage',
+    titleKn: 'ಕಾಗೆ',
+    youtubeId: 'bDkN8k-DWwA',
+    credits: [{ artist: 'mc-bijju' }],
+    genres: ['hiphop'],
+    moods: ['restless', 'latenight'],
+  },
+  {
+    id: 'lit',
+    title: 'LIT',
+    titleKn: 'ಲಿಟ್',
+    youtubeId: 'xlCsTl8YNnA',
+    credits: [
+      { artist: 'rahul-dit-o' },
+      { artist: 's-i-d', role: 'with' },
+      { artist: 'mc-bijju', role: 'with' },
+    ],
+    genres: ['hiphop'],
+    moods: ['restless', 'joy'],
+  },
+  {
+    id: 'swaha',
+    title: 'Swaha',
+    titleKn: 'ಸ್ವಾಹಾ',
+    youtubeId: 'G8Y1Hiyxm2E',
+    credits: [
+      { artist: 'lagori' },
+      { artist: 'rahul-dit-o', role: 'with' },
+      { artist: 'mc-bijju', role: 'with' },
+    ],
+    genres: ['hiphop', 'rock'],
+    moods: ['restless'],
+  },
+  {
+    id: 'helkolakondooru',
+    title: 'Helkolakondooru',
+    titleKn: 'ಹೇಳ್ಕೊಳಕ್ಕೊಂದೂರು',
+    youtubeId: 'GJE9wfXZ3ww',
+    credits: [{ artist: 'lagori' }],
+    genres: ['rock'],
+    moods: ['joy'],
+  },
+  {
+    id: 'tulasi',
+    title: 'Tulasi',
+    titleKn: 'ತುಳಸಿ',
+    youtubeId: 'Y8ZApXcnhy4',
+    credits: [{ artist: 'sumedh-k' }, { artist: 'sumant-shridhar', role: 'with' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'maaye',
+    title: 'Maaye',
+    titleKn: 'ಮಾಯೆ',
+    youtubeId: 'Yxx-zTuw1xE',
+    credits: [{ artist: 'sumedh-k' }],
+    genres: ['indiepop'],
+    moods: ['latenight', 'longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'saagara',
+    title: 'Saagara',
+    titleKn: 'ಸಾಗರ',
+    youtubeId: 'ZcRGOUJXJQg',
+    credits: [{ artist: 'chiranthana-am' }, { artist: 'sumedh-k', role: 'with' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    // "- Topic" is YouTube's auto-generated official channel for a label's catalogue, not a fan re-upload.
+    id: 'daaha',
+    title: 'Daaha',
+    titleKn: 'ದಾಹ',
+    youtubeId: 'CirEMx-__no',
+    credits: [{ artist: 'sumedh-k' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    // Uploaded on Mitra Hegde's channel, who sings on it. Still official.
+    id: 'meghave',
+    title: 'Meghave',
+    titleKn: 'ಮೇಘವೇ',
+    youtubeId: 'e9cAxbdivFw',
+    credits: [
+      { artist: 'sumedh-k' },
+      { artist: 'aditi-prahalad', role: 'featured' },
+      { artist: 'ashwin-mandoth', role: 'featured' },
+      { artist: 'mitra-hegde', role: 'featured' },
+    ],
+    genres: ['indiepop'],
+    moods: ['rain', 'longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'kareyole',
+    title: 'Kareyole',
+    titleKn: 'ಕರೆಯೊಲೆ',
+    youtubeId: 'HSzJL-GJBHc',
+    credits: [{ artist: 'sanjith-hegde' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'nange-allava',
+    title: 'Nange Allava',
+    titleKn: 'ನಂಗೆ ಅಲ್ಲವಾ',
+    youtubeId: 'RVMnT4nq9NU',
+    credits: [{ artist: 'sanjith-hegde' }, { artist: 'sanjana-doss', role: 'with' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    // Draws on Purandaradasa's "Tarakka Bindige".
+    id: 'taare-bindigeya',
+    title: 'Taare Bindigeya',
+    titleKn: 'ತಾರೆ ಬಿಂದಿಗೆಯ',
+    youtubeId: 'HzpOXAHJN1M',
+    credits: [{ artist: 'sanjith-hegde' }, { artist: 'bijoy-shetty', role: 'with' }],
+    genres: ['devotional', 'indiepop'],
+    moods: ['latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'maayavi',
+    title: 'Maayavi',
+    titleKn: 'ಮಾಯಾವಿ',
+    youtubeId: 'TMY1g8pAktk',
+    credits: [
+      { artist: 'sonu-nigam' },
+      { artist: 'sanjith-hegde' },
+      { artist: 'nagarjun-sharma', role: 'with' },
+    ],
+    genres: ['indiepop'],
+    moods: ['longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'ninna-notavu',
+    title: 'Ninna Notavu',
+    titleKn: 'ನಿನ್ನ ನೋಟವು',
+    youtubeId: 'FDCc2beB77I',
+    credits: [{ artist: 'tanmay-gururaj' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'joy'],
+    childSafe: true,
+  },
+  {
+    id: 'nasheya-gungale',
+    title: 'Nasheya Gungale',
+    titleKn: 'ನಶೆಯ ಗುಂಗಲೆ',
+    youtubeId: '9dlbKgxvg_A',
+    credits: [{ artist: 'tanmay-gururaj' }, { artist: 'jerusha-christopher', role: 'featured' }],
+    genres: ['indiepop'],
+    moods: ['latenight', 'longing'],
+  },
+  {
+    // Official upload from Madhura Audio. Words by Kiran Kaverappa, composed by Phani Kalyan.
+    id: 'neene',
+    title: 'Neene',
+    titleKn: 'ನೀನೇ',
+    youtubeId: 'xRWXjBavcqY',
+    credits: [
+      { artist: 'yazin-nizar' },
+      { artist: 'sparsha-rk' },
+      { artist: 'kiran-kaverappa', role: 'words' },
+      { artist: 'phani-kalyan', role: 'music' },
+    ],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight'],
+    childSafe: true,
+  },
+  {
+    id: 'seetha-kalyana',
+    title: 'Seetha Kalyana',
+    titleKn: 'ಸೀತಾ ಕಲ್ಯಾಣ',
+    youtubeId: 'wsGnsRa5wxE',
+    credits: [{ artist: 'curry' }],
+    genres: ['electronic', 'indiepop'],
+    moods: ['joy'],
+    childSafe: true,
+  },
+  {
+    id: 'nannavale',
+    title: 'Nannavale',
+    titleKn: 'ನನ್ನವಳೆ',
+    youtubeId: 'egbFaBl8Of4',
+    credits: [{ artist: 'curry' }],
+    genres: ['electronic'],
+    moods: ['joy'],
+    childSafe: true,
+  },
+  {
+    id: 'manase',
+    title: 'Manase',
+    titleKn: 'ಮನಸೆ',
+    youtubeId: 'yQOjJLdzJqY',
+    credits: [{ artist: 'curry' }],
+    genres: ['electronic'],
+    moods: ['latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'bhasavagide',
+    title: 'Bhasavagide',
+    titleKn: 'ಭಾಸವಾಗಿದೆ',
+    youtubeId: 'J8IQ40P9e08',
+    credits: [{ artist: 'narayan-sharma' }],
+    genres: ['indiepop', 'folk'],
+    moods: ['longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'baanancha-daati',
+    title: 'Baanancha Daati',
+    titleKn: 'ಬಾನಂಚ ದಾಟಿ',
+    youtubeId: '3YbVZ5f4Gj0',
+    credits: [{ artist: 'narayan-sharma' }, { artist: 'sumedh-k', role: 'with' }],
+    genres: ['indiepop'],
+    moods: ['road', 'longing'],
+    childSafe: true,
+  },
+  {
+    id: 'uttara-kannada',
+    title: 'Uttara Kannada',
+    titleKn: 'ಉತ್ತರ ಕನ್ನಡ',
+    youtubeId: 'BJ-gIBC4w5g',
+    credits: [{ artist: 'narayan-sharma' }],
+    genres: ['folk'],
+    moods: ['road', 'rain', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'fineapple',
+    title: 'Fineapple',
+    titleKn: 'ಫೈನಾಪಲ್',
+    youtubeId: 'ol6mmFtZbJY',
+    credits: [{ artist: 'pineapple-express' }],
+    genres: ['fusion'],
+    moods: ['joy', 'restless'],
+  },
+  {
+    id: 'gira-gira',
+    title: 'Gira Gira',
+    titleKn: 'ಗಿರ ಗಿರ',
+    youtubeId: 'y4QPOKGcnuI',
+    credits: [
+      { artist: 'vasuki-vaibhav' },
+      { artist: 'mayuri-nataraja', role: 'with' },
+      { artist: 'prakyath-narayan', role: 'with' },
+    ],
+    genres: ['indiepop'],
+    moods: ['joy'],
+    childSafe: true,
+  },
+  {
+    id: 'ninnane',
+    title: 'Ninnane',
+    titleKn: 'ನಿನ್ನನೇ',
+    youtubeId: 'Hl-cljNHfCo',
+    credits: [
+      { artist: 'mitra-hegde' },
+      { artist: 'manish-kodira', role: 'with' },
+      { artist: 'sumedh-k', role: 'with' },
+    ],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'nanariye',
+    title: 'Nanariye',
+    titleKn: 'ನನಗರಿಯೆ',
+    youtubeId: 'OBKYBEeBdic',
+    credits: [{ artist: 'mitra-hegde' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'marujanma',
+    title: 'Marujanma',
+    titleKn: 'ಮರುಜನ್ಮ',
+    youtubeId: 'FUOOO9LcEzI',
+    credits: [{ artist: 'adhvik' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'alemaari',
+    title: 'Alemaari',
+    titleKn: 'ಅಲೆಮಾರಿ',
+    youtubeId: '-TXZG0lh8PY',
+    credits: [{ artist: 'adhvik' }, { artist: 'chinmayee', role: 'featured' }],
+    genres: ['indiepop', 'folk'],
+    moods: ['road'],
+    childSafe: true,
+  },
+  {
+    id: 'ninna-gungalli',
+    title: 'Ninna Gungalli',
+    titleKn: 'ನಿನ್ನ ಗುಂಗಲ್ಲಿ',
+    youtubeId: 'iLf_yqF9VjA',
+    credits: [{ artist: 'adhvik' }],
+    genres: ['indiepop'],
+    moods: ['longing'],
+    childSafe: true,
+  },
+  {
+    id: 'stay-with-me',
+    title: 'Stay With Me',
+    titleKn: 'ಸ್ಟೇ ವಿಥ್ ಮಿ',
+    youtubeId: 'iU8QqpBhMaY',
+    credits: [{ artist: 'adhvik' }],
+    genres: ['indiepop'],
+    moods: ['latenight', 'longing'],
+    childSafe: true,
+  },
+  {
+    id: 'moha',
+    title: 'Moha',
+    titleKn: 'ಮೋಹ',
+    youtubeId: 'dXo1UkRaw3A',
+    credits: [{ artist: 'thanusha-km' }, { artist: 'keerthan-holla' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight'],
+    childSafe: true,
+  },
+  {
+    id: 'nammooru',
+    title: 'Nammooru',
+    titleKn: 'ನಮ್ಮೂರು',
+    youtubeId: '5akMHLngXiY',
+    credits: [{ artist: 'mysore-xpress' }],
+    genres: ['rock', 'folk'],
+    moods: ['joy', 'road'],
+    childSafe: true,
+  },
+  {
+    id: 'aahana',
+    title: 'Aahana',
+    titleKn: 'ಆಹಾನ',
+    youtubeId: 'oFyJAYNohAk',
+    credits: [{ artist: 'rajat-hegde' }, { artist: 'narayan-sharma', role: 'with' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'joy'],
+    childSafe: true,
+  },
+  {
+    id: 'chinnada-hoovu',
+    title: 'Chinnada Hoovu',
+    titleKn: 'ಚಿನ್ನದ ಹೂವು',
+    youtubeId: 'P3CvKQTVr8c',
+    credits: [{ artist: 'karthik-chennoji-rao' }, { artist: 'avinash-balekkala', role: 'with' }],
+    genres: ['indiepop', 'folk'],
+    moods: ['joy', 'longing'],
+    childSafe: true,
+  },
+  {
+    id: 'papi-chirayu',
+    title: 'Papi Chirayu',
+    titleKn: 'ಪಾಪಿ ಚಿರಾಯು',
+    youtubeId: 'jxUoMVRAYL4',
+    credits: [{ artist: 'chirayu' }],
+    genres: ['hiphop'],
+    moods: ['restless'],
+  },
+  {
+    id: 'rap-god',
+    title: 'Rap God',
+    titleKn: 'ರ‍್ಯಾಪ್ ಗಾಡ್',
+    youtubeId: '8GYxPhOrHu4',
+    credits: [{ artist: 'chirayu' }],
+    genres: ['hiphop'],
+    moods: ['restless'],
+  },
+  {
+    id: 'nee',
+    title: 'Nee',
+    titleKn: 'ನೀ',
+    youtubeId: 'fJoii5IURrk',
+    credits: [{ artist: 'varijashree-venugopal' }],
+    genres: ['fusion'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'ranjani',
+    title: 'Ranjani',
+    titleKn: 'ರಂಜನಿ',
+    youtubeId: 'EPZLl9XycOc',
+    credits: [{ artist: 'varijashree-venugopal' }, { artist: 'bela-fleck', role: 'featured' }],
+    genres: ['fusion'],
+    moods: ['joy', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'harivaa-jhari',
+    title: 'Harivaa Jhari',
+    titleKn: 'ಹರಿವಾ ಝರಿ',
+    youtubeId: 'g6Q2yMu8C3s',
+    credits: [{ artist: 'varijashree-venugopal' }],
+    genres: ['fusion'],
+    moods: ['rain', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'preeti-sadhyave',
+    title: 'Preeti Sadhyave?',
+    titleKn: 'ಪ್ರೀತಿ ಸಾಧ್ಯವೇ?',
+    youtubeId: '8Ob9D_PhC_c',
+    credits: [{ artist: 'kutcheri' }],
+    genres: ['rock', 'indiepop'],
+    moods: ['longing'],
+    childSafe: true,
+  },
+  {
+    id: 'endigu',
+    title: 'Endigu',
+    titleKn: 'ಎಂದಿಗೂ',
+    youtubeId: 'KWc04PcvZpk',
+    credits: [{ artist: 'kutcheri' }],
+    genres: ['rock'],
+    moods: ['longing', 'restless'],
+    childSafe: true,
+  },
+  {
+    id: 'sahane-torede',
+    title: 'Sahane Torede',
+    titleKn: 'ಸಹನೆ ತೊರೆದೆ',
+    youtubeId: 'F4NNry7lLsM',
+    credits: [
+      { artist: 'pranava-karanth' },
+      { artist: 'goutham-hc', role: 'featured' },
+      { artist: 'nidhi-hegde', role: 'featured' },
+      { artist: 'raghav-bhotika', role: 'with' },
+    ],
+    genres: ['indiepop'],
+    moods: ['longing', 'restless', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'bhoorame',
+    title: 'Bhoorame',
+    titleKn: 'ಭೂರಮೆ',
+    youtubeId: 'jjzE71kE4UQ',
+    credits: [
+      { artist: 'priya-mali' },
+      { artist: 'nagarjun-sharma', role: 'with' },
+      { artist: 'harsh', role: 'with' },
+    ],
+    genres: ['indiepop'],
+    moods: ['longing', 'joy'],
+    childSafe: true,
+  },
+  {
+    id: 'nanna-savaari',
+    title: 'Nanna Savaari',
+    titleKn: 'ನನ್ನ ಸವಾರಿ',
+    youtubeId: 'tjd_9l5iAhQ',
+    credits: [{ artist: 'vishwi' }, { artist: 'aishwarya-rangarajan', role: 'with' }],
+    genres: ['indiepop', 'fusion'],
+    moods: ['road', 'joy'],
+    childSafe: true,
+  },
+  {
+    id: 'kaledhode',
+    title: 'Kaledhode',
+    titleKn: 'ಕಳೆದೋದೆ',
+    youtubeId: 'qTSjEnYYfT0',
+    credits: [{ artist: 'tarana' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'latenight', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'rockstar',
+    title: 'Rockstar',
+    titleKn: 'ರಾಕ್‌ಸ್ಟಾರ್',
+    youtubeId: 'kAEDS_cYwzY',
+    credits: [{ artist: 'suraj-km' }],
+    genres: ['rock', 'indiepop'],
+    moods: ['restless', 'joy'],
+  },
+  {
+    id: 'horaadu-nee',
+    title: 'Horaadu Nee',
+    titleKn: 'ಹೋರಾಡು ನೀ',
+    youtubeId: 'HUiCpPfUXvI',
+    credits: [{ artist: 'suraj-km' }],
+    genres: ['indiepop', 'rock'],
+    moods: ['restless'],
+    childSafe: true,
+  },
+  {
+    id: 'kaadige',
+    title: 'Kaadige',
+    titleKn: 'ಕಾಡಿಗೆ',
+    youtubeId: 'Jz7nqW692w8',
+    credits: [{ artist: 'suraj-km' }],
+    genres: ['indiepop'],
+    moods: ['longing', 'focus'],
+    childSafe: true,
+  },
+  {
+    id: 'sanchaari',
+    title: 'Sanchaari',
+    titleKn: 'ಸಂಚಾರಿ',
+    youtubeId: 'qr1nVeFK_3k',
+    credits: [{ artist: 'suraj-km' }],
+    genres: ['indiepop'],
+    moods: ['road'],
+    childSafe: true,
+  },
+  {
+    id: 'thaare',
+    title: 'Thaare',
+    titleKn: 'ತಾರೆ',
+    youtubeId: '4kKmTaEjl4Y',
+    credits: [{ artist: 'suraj-km' }],
+    genres: ['indiepop'],
+    moods: ['latenight', 'longing', 'focus'],
+    childSafe: true,
+  },
+]
+
+/** A song's title in both scripts, for the bilingual display components. */
+export function songTitle(song: Song): Bilingual {
+  return { en: song.title, kn: song.titleKn ?? song.title }
+}
+
+const artistById = new Map(artists.map((artist) => [artist.id, artist]))
+
+export function findArtist(id: string | undefined): Artist | undefined {
+  return id ? artistById.get(id) : undefined
+}
+
+/** A credit with its artist resolved, so callers never hold a bare id. */
+export interface ResolvedCredit {
+  artist: Artist
+  role: CreditRole
+}
+
+/**
+ * Everyone credited on a song, in billing order.
+ *
+ * Throws on an unknown id rather than dropping the credit silently. A missing
+ * name on a page about crediting people is exactly the failure worth making
+ * loud, and it can only happen from a typo in this file.
+ */
+export function songCredits(song: Song): ResolvedCredit[] {
+  return song.credits.map(({ artist, role }) => {
+    const found = artistById.get(artist)
+    if (!found) throw new Error(`Song "${song.id}" credits an unknown artist: "${artist}"`)
+    return { artist: found, role: role ?? 'lead' }
+  })
+}
+
+/**
+ * The names a row shows when it has room for one line: the leads, joined.
+ *
+ * Featured and writing credits are deliberately left out here and shown in
+ * full where there is space for them. A deck bar reading four names truncates
+ * to one and a half, which credits nobody.
+ */
+export function billing(song: Song): Bilingual {
+  const leads = songCredits(song).filter((credit) => credit.role === 'lead')
+  const named = leads.length ? leads : songCredits(song).slice(0, 1)
+  return {
+    kn: named.map((credit) => credit.artist.name.kn).join(', '),
+    en: named.map((credit) => credit.artist.name.en).join(', '),
+  }
 }
 
 /** Every platform we link out to, in the order they render on a card. */
@@ -979,38 +1346,35 @@ export function platformLinks(artist: Artist): { platform: Platform; url: string
 /**
  * Where to hear *this song* elsewhere.
  *
- * YouTube is exact: we hold a verified video id for every track. Spotify and
- * Apple are searches scoped to the song and artist, because we do not hold
- * per-song ids for them and a guessed one lands on a 404 or, worse, on somebody
- * else's record. Fill `spotifyUrl` / `appleMusicUrl` on a track and that exact
- * link replaces the search.
+ * YouTube is exact: we hold a verified video id for every song. Spotify and
+ * Apple are searches scoped to the song and its billed lead, because we do not
+ * hold per-song ids for them and a guessed one lands on a 404 or, worse, on
+ * somebody else's record. Fill `spotifyUrl` / `appleMusicUrl` on a song and
+ * that exact link replaces the search.
  */
-export function trackLinks(
-  artist: Artist,
-  track: Track,
-): { platform: Platform; url: string; exact: boolean }[] {
-  const query = encodeURIComponent(`${track.title} ${artist.name.en}`)
+export function songLinks(song: Song): { platform: Platform; url: string; exact: boolean }[] {
+  const query = encodeURIComponent(`${song.title} ${billing(song).en}`)
 
   return [
     {
       platform: 'youtube' as const,
-      url: `https://www.youtube.com/watch?v=${track.youtubeId}`,
+      url: `https://www.youtube.com/watch?v=${song.youtubeId}`,
       exact: true,
     },
     {
       platform: 'spotify' as const,
-      url: track.spotifyUrl ?? `https://open.spotify.com/search/${query}`,
-      exact: Boolean(track.spotifyUrl),
+      url: song.spotifyUrl ?? `https://open.spotify.com/search/${query}`,
+      exact: Boolean(song.spotifyUrl),
     },
     {
       platform: 'appleMusic' as const,
-      url: track.appleMusicUrl ?? `https://music.apple.com/in/search?term=${query}`,
-      exact: Boolean(track.appleMusicUrl),
+      url: song.appleMusicUrl ?? `https://music.apple.com/in/search?term=${query}`,
+      exact: Boolean(song.appleMusicUrl),
     },
     {
       platform: 'ytMusic' as const,
-      url: track.ytMusicUrl ?? `https://music.youtube.com/search?q=${query}`,
-      exact: Boolean(track.ytMusicUrl),
+      url: song.ytMusicUrl ?? `https://music.youtube.com/search?q=${query}`,
+      exact: Boolean(song.ytMusicUrl),
     },
   ]
 }
@@ -1031,20 +1395,51 @@ export function artistProfiles(artist: Artist): { profile: Profile; url: string 
     .filter((entry) => entry.url !== '')
 }
 
-/** Every track in roster order, with its artist, the player's base queue. */
+const itemByKey = new Map<string, QueueItem>()
+
+/** One song as the player holds it: everything a row or the deck needs. */
 export interface QueueItem {
+  song: Song
+  /** Everyone credited, resolved, in billing order. */
+  credits: ResolvedCredit[]
+  /** The billed lead. Where a row links to one artist, it links here. */
   artist: Artist
-  track: Track
+  /** Every lead name in one string, both scripts. What most rows show. */
+  billing: Bilingual
+  /** `song.id`. Stable identity for one queued song. */
   key: string
 }
 
-export const queue: QueueItem[] = artists.flatMap((artist) =>
-  artist.tracks.map((track) => ({
-    artist,
-    track,
-    key: `${artist.id}:${track.youtubeId}`,
-  })),
-)
+export const queue: QueueItem[] = songs.map((song) => {
+  const credits = songCredits(song)
+  return {
+    song,
+    credits,
+    artist: credits[0].artist,
+    billing: billing(song),
+    key: song.id,
+  }
+})
+
+for (const item of queue) itemByKey.set(item.key, item)
+
+/** The queue entry for a song, so a page holding a `Song` can play it. */
+export function itemFor(song: Song): QueueItem {
+  const item = itemByKey.get(song.id)
+  if (!item) throw new Error(`No queue entry for song "${song.id}"`)
+  return item
+}
+
+/**
+ * Every song an artist is credited on, in tape order.
+ *
+ * This is the whole point of the shape: an artist page is a query over the
+ * songs rather than a list owned by the artist, so a singer who appears once on
+ * somebody else's record still gets that song on their page.
+ */
+export function songsBy(artistId: string): QueueItem[] {
+  return queue.filter((item) => item.song.credits.some((credit) => credit.artist === artistId))
+}
 
 /**
  * The roster A to Z, for pages that list artists.
@@ -1057,9 +1452,25 @@ export const artistsAlphabetical: Artist[] = [...artists].sort((a, b) =>
   new Intl.Collator('en', { sensitivity: 'base' }).compare(a.name.en, b.name.en),
 )
 
-export function findArtist(id: string | undefined): Artist | undefined {
-  return artists.find((artist) => artist.id === id)
-}
+/**
+ * Artists billed as the lead on at least one song. The roster proper, and what
+ * /artists gives a card to.
+ */
+export const leadingArtists: Artist[] = artistsAlphabetical.filter((artist) =>
+  songs.some((song) =>
+    song.credits.some((credit) => credit.artist === artist.id && (credit.role ?? 'lead') === 'lead'),
+  ),
+)
+
+/**
+ * Everyone else who is credited: featured singers, players, the poets whose
+ * words a song is built on. They get a page and a name, but not a card: a card
+ * with one song and no write-up is a worse way to credit someone than a line in
+ * a list that says plainly what this is.
+ */
+export const supportingArtists: Artist[] = artistsAlphabetical.filter(
+  (artist) => !leadingArtists.includes(artist),
+)
 
 /** How many songs are cleared for family listening, shown next to the toggle. */
-export const childSafeCount = queue.filter((item) => item.track.childSafe).length
+export const childSafeCount = songs.filter((song) => song.childSafe).length

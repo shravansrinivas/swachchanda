@@ -19,11 +19,10 @@ export function HomePage({ active }: { active: HeroImage }) {
   const { nowPlaying, status, toggle, playFiltered } = usePlayer()
 
   const playing = status === 'playing'
-  const track = nowPlaying?.track
-  const artist = nowPlaying?.artist
+  const song = nowPlaying?.song
 
   return (
-    <section className="flex h-full flex-col overflow-hidden px-5 pt-3 pb-24">
+    <section className="flex h-full flex-col overflow-hidden px-5 pt-3 pb-[calc(6rem+env(safe-area-inset-bottom))]">
       {/*<p className={`stamp mb-2.5 text-dial/80 ${kn ? 'kn tracking-normal' : ''}`}>
         {t.independenceLine}
       </p>*/}
@@ -78,18 +77,20 @@ export function HomePage({ active }: { active: HeroImage }) {
           <p className={`stamp text-dust/85 ${kn ? 'kn tracking-normal' : ''}`}>
             {playing ? t.nowPlaying : t.ctaStart}
           </p>
-          {track && artist ? (
+          {nowPlaying && song ? (
             <div className="mt-1 flex items-center gap-2.5">
               <Thumbnail
-                youtubeId={track.youtubeId}
-                alt={kn ? (track.titleKn ?? track.title) : track.title}
+                youtubeId={song.youtubeId}
+                alt={kn ? (song.titleKn ?? song.title) : song.title}
                 className="w-11 shrink-0"
               />
               <div className="min-w-0">
                 <p className={`truncate text-[0.95rem] text-label ${kn ? 'kn' : ''}`}>
-                  {kn ? (track.titleKn ?? track.title) : track.title}
+                  {kn ? (song.titleKn ?? song.title) : song.title}
                 </p>
-                <p className={`truncate text-xs text-dust ${kn ? 'kn' : ''}`}>{artist.name[lang]}</p>
+                <p className={`truncate text-xs text-dust ${kn ? 'kn' : ''}`}>
+                  {nowPlaying.billing[lang]}
+                </p>
               </div>
             </div>
           ) : (

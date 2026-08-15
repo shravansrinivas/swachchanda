@@ -4,10 +4,11 @@ import {
   artistProfiles,
   platformLabels,
   profileLabels,
-  trackLinks,
-  trackTitle,
+  songLinks,
+  songTitle,
   type Bilingual,
 } from '../data/artists'
+import { enterEkanthaFullscreen } from '../lib/fullscreen'
 import { useLanguage } from '../lib/language'
 import { usePlayer } from '../lib/player'
 import { useConnection } from '../lib/useConnection'
@@ -48,10 +49,9 @@ export function PlayerDock() {
   const navigate = useNavigate()
   const playing = status === 'playing'
   const failed = status === 'error'
-  const track = nowPlaying?.track
-  const artist = nowPlaying?.artist
+  const song = nowPlaying?.song
 
-  const title = track ? trackTitle(track) : { en: t.idleLabel, kn: t.idleLabel }
+  const title = song ? songTitle(song) : { en: t.idleLabel, kn: t.idleLabel }
 
   useEffect(() => {
     if (!expanded) return
@@ -118,10 +118,10 @@ export function PlayerDock() {
             </span>
 
             <span className="flex min-w-0 flex-1 items-center gap-2 rounded-[2px] bg-label/92 px-2 py-1">
-              {track && (
+              {song && (
                 <span className="hidden shrink-0 -rotate-2 rounded-[1px] bg-white p-[2px] shadow-[0_2px_5px_-1px_rgb(0_0_0/0.4)] min-[380px]:block">
                   <img
-                    src={`https://i.ytimg.com/vi/${track.youtubeId}/mqdefault.jpg`}
+                    src={`https://i.ytimg.com/vi/${song.youtubeId}/mqdefault.jpg`}
                     alt=""
                     aria-hidden="true"
                     className="block h-7 w-7 rounded-[1px] object-cover"
@@ -135,7 +135,7 @@ export function PlayerDock() {
                 </span>
                 {/* The artist, which the minimised deck used to leave out. */}
                 <span className="hand hand-second block truncate text-[0.78rem] leading-tight">
-                  {artist ? artist.name.en : statusLine}
+                  {nowPlaying ? nowPlaying.billing.en : statusLine}
                 </span>
               </span>
 
@@ -167,7 +167,7 @@ export function PlayerDock() {
 
             {failed ? (
               <a
-                href={`https://www.youtube.com/watch?v=${track?.youtubeId}`}
+                href={`https://www.youtube.com/watch?v=${song?.youtubeId}`}
                 target="_blank"
                 rel="noreferrer"
                 className={`rounded-full border border-dial/50 px-3 py-2 font-mono text-[11px] leading-tight text-dial transition-colors hover:bg-dial hover:text-tape ${kn ? 'kn' : ''}`}
@@ -225,7 +225,10 @@ export function PlayerDock() {
           <button
             data-dock-control
             type="button"
-            onClick={() => navigate('/ekantha')}
+            onClick={() => {
+              enterEkanthaFullscreen()
+              navigate('/ekantha')
+            }}
             aria-label={t.ekanthaEnter}
             title={t.ekanthaEnter}
             className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-dial/50 bg-dial/10 px-2.5 text-dial transition-colors hover:bg-dial hover:text-tape"
@@ -320,6 +323,7 @@ function TransportButton({
  */
 function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine: string }) {
   const { t, kn, lang } = useLanguage()
+  const navigate = useNavigate()
   const {
     nowPlaying,
     status,
@@ -336,10 +340,11 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
 
   const playing = status === 'playing'
   const artist = nowPlaying?.artist
-  const track = nowPlaying?.track
+  const song = nowPlaying?.song
 
-  const title: Bilingual = track ? trackTitle(track) : { en: t.idleLabel, kn: t.idleLabel }
-  const artistName: Bilingual = artist?.name ?? { en: t.idleHint, kn: t.idleHint }
+  const title: Bilingual = song ? songTitle(song) : { en: t.idleLabel, kn: t.idleLabel }
+  // Every billed name, not just the first: this is the one place with room.
+  const artistName: Bilingual = nowPlaying?.billing ?? { en: t.idleHint, kn: t.idleHint }
 
   const { offline, jammed } = useConnection()
 
@@ -370,7 +375,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
                 body={offline ? t.offlineBody : t.stalledBody}
                 onRetry={
                   !offline && nowPlaying
-                    ? () => play(nowPlaying.artist, nowPlaying.track)
+                    ? () => play(nowPlaying)
                     : undefined
                 }
                 retryLabel={t.retry}
@@ -382,7 +387,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
                 side={statusLine}
                 title={title}
                 artist={artistName}
-                coverId={track?.youtubeId}
+                coverId={song?.youtubeId}
               />
             )}
 
@@ -464,7 +469,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
 
           {/* What is playing, and where else to hear it. */}
           <div className="sm:order-1">
-            {artist && track && (
+            {artist && song && (
               <>
                 <BiText
                   value={title}
@@ -484,7 +489,7 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
                   <span className={`stamp text-dust/80 ${kn ? 'kn tracking-normal' : ''}`}>
                     {t.listenOn}
                   </span>
-                  {trackLinks(artist, track).map(({ platform, url, exact }) => (
+                  {songLinks(song).map(({ platform, url, exact }) => (
                     <a
                       key={platform}
                       href={url}
@@ -523,13 +528,31 @@ function ExpandedDeck({ onClose, statusLine }: { onClose: () => void; statusLine
             </div>
 
 
-            <button
-              type="button"
-              onClick={onClose}
-              className={`mt-5 w-full rounded-full border border-dust/25 py-2.5 text-sm text-dust transition-colors hover:border-dial hover:text-dial ${kn ? 'kn' : ''}`}
-            >
-              {t.collapsePlayer}
-            </button>
+            {/* Ekantha is offered here too. Someone with the deck open has
+                already said they came to listen, which is the moment the
+                quieter room is most worth pointing at, and the alternative was
+                closing the player to go and find it in the header. */}
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  enterEkanthaFullscreen()
+                  onClose()
+                  navigate('/ekantha')
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-full border border-dial/50 bg-dial/10 py-2.5 text-sm text-dial transition-colors hover:bg-dial hover:text-tape ${kn ? 'kn' : 'font-display'}`}
+              >
+                <EkanthaIcon size={15} />
+                {t.ekanthaEnter}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className={`flex-1 rounded-full border border-dust/25 py-2.5 text-sm text-dust transition-colors hover:border-dial hover:text-dial ${kn ? 'kn' : ''}`}
+              >
+                {t.collapsePlayer}
+              </button>
+            </div>
           </div>
         </div>
 

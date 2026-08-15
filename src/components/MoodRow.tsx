@@ -8,21 +8,34 @@ import { usePlayer } from '../lib/player'
  * cannot drift apart.
  *
  * One row that scrolls sideways rather than wrapping, which keeps the home
- * screen's height fixed however many moods exist. Selecting one re-cues the
- * deck and re-scopes the background; both happen upstream off the filters, so
- * this only has to set them.
+ * screen's height fixed however many moods exist. Selecting one re-scopes the
+ * queue and the background; both happen upstream off the filters, so this only
+ * has to set them.
+ *
+ * `browseOnly` is the song list. Everywhere else a mood is the only thing to
+ * press, so picking one starts that set playing; on the song list the same
+ * control filters a view you are reading, and starting a song under you there
+ * is an interruption rather than an answer.
  *
  * `onMore` adds a trailing button for the fuller controls (sound, family
  * listening). Home leaves it off: the point of that screen is one decision.
  */
-export function MoodRow({ onMore, label }: { onMore?: () => void; label?: string }) {
+export function MoodRow({
+  onMore,
+  label,
+  browseOnly = false,
+}: {
+  onMore?: () => void
+  label?: string
+  browseOnly?: boolean
+}) {
   const { t, kn, lang } = useLanguage()
   const { filters, setFilters } = usePlayer()
 
   const active: Mood | 'any' = filters.moods.length === 1 ? filters.moods[0] : 'any'
 
   const pick = (mood: Mood | 'any') =>
-    setFilters({ ...filters, moods: mood === 'any' ? [] : [mood] })
+    setFilters({ ...filters, moods: mood === 'any' ? [] : [mood] }, !browseOnly)
 
   return (
     <div>
