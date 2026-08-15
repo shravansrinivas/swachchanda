@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------
+   Swachchanda, late-night radio / handwritten mixtape
+   Palette: sodium streetlamp on a wet Bengaluru road.
+   ------------------------------------------------------------------ */
+@theme {
+  --color-tape: #1b2029; /* deep slate-indigo, the cassette shell */
+  --color-deck: #252b36; /* raised surfaces: cards, player bar */
+  --color-dial: #e8b25c; /* sodium-vapour amber, primary accent */
+  --color-label: #ede6d6; /* aged label paper, primary text */
+  --color-verdigris: #4e7c74; /* oxidized copper, links, counterweight */
+  --color-dust: #b0aa99; /* warm grey, secondary text, credits */
+
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Courier Prime', ui-monospace, monospace;
+  /* Handwriting, for the cassette sticker only. Kannada has no equivalent on
+     Google Fonts, so it falls back to Baloo Tamma 2, which is rounded enough
+     to sit beside it without looking like a different object. */
+  --font-hand: 'Caveat', 'Baloo Tamma 2', cursive;
+  --font-kn-display: 'Baloo Tamma 2', 'Noto Sans Kannada', sans-serif;
+  --font-kn: 'Noto Sans Kannada', sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-tape);
+    color: var(--color-label);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    /* Never let the fixed player bar cover the last card. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  ::selection {
+    background: var(--color-dial);
+    color: var(--color-tape);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-dial);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Kannada text needs a little more line-height than the Latin default;
+     the script has tall vowel signs that collide at 1.4. */
+  .kn {
+    font-family: var(--font-kn);
+    line-height: 1.75;
+  }
+
+  .kn-display {
+    font-family: var(--font-kn-display);
+    line-height: 1.4;
+  }
+
+  /* Handwriting on the cassette label.
+     Real pen on a paper label is never quite level and never quite the same
+     colour as print, so: a slight rotation, a blue-black ink rather than the
+     page's own text colour, and a faint smudge from the text-shadow. */
+  .hand {
+    font-family: var(--font-hand);
+    line-height: 1.1;
+    color: #23314d;
+    text-shadow: 0 0.5px 0 rgb(35 49 77 / 0.28);
+  }
+
+  .hand-tilt {
+    transform: rotate(-1.4deg);
+    transform-origin: left center;
+  }
+
+  /* The second line of a hand-written pair sits a touch lower and lighter, the
+     way a second thought written under the first does. */
+  .hand-second {
+    color: #3c4c6b;
+    transform: rotate(-0.6deg);
+    transform-origin: left center;
+  }
+
+  /* Typewriter micro-label, the J-card texture. */
+  .stamp {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.6875rem;
+  }
+}
+
+/* Film grain, one SVG turbulence, reused as an overlay everywhere. */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+}
+
+/* The player bar slides up the first time something plays. */
+@keyframes player-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* The signature element: tape reels that turn while audio plays. */
+@keyframes reel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* SVG groups rotate about the element box, not the viewBox, without this. */
+.spin-center {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+}
+
+.reel-spinning {
+  animation: reel-spin 4s linear infinite;
+}
+
+.reel-stopped {
+  animation: reel-spin 4s linear infinite;
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reel-spinning,
+  .reel-stopped {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
