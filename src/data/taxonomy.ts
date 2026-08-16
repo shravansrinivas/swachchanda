@@ -19,6 +19,13 @@ export type Genre =
   | 'rock'
   | 'fusion'
   | 'electronic'
+  /**
+   * Kannada poetry set to music and released outside the film industry. The
+   * oldest independent music this site has, and the reason the tag exists: on
+   * a genre filter these sit somewhere between folk and devotional and are
+   * neither, and the tradition has a name of its own.
+   */
+  | 'bhavageethe'
 
 export type Mood = 'latenight' | 'longing' | 'restless' | 'joy' | 'rain' | 'road' | 'focus'
 
@@ -30,6 +37,7 @@ export const genreLabels: Record<Genre, Bilingual> = {
   rock: { kn: 'ರಾಕ್', en: 'Rock' },
   fusion: { kn: 'ಫ್ಯೂಷನ್', en: 'Fusion' },
   electronic: { kn: 'ಎಲೆಕ್ಟ್ರಾನಿಕ್', en: 'Electronic' },
+  bhavageethe: { kn: 'ಭಾವಗೀತೆ', en: 'Bhavageethe' },
 }
 
 /** Mood labels lean evocative rather than clinical, this is a mixtape. */
